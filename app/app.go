@@ -46,6 +46,7 @@ type App interface {
 	PrepareUserSession(ctx context.Context, sess *model.Session) error
 	FreeUserSession(ctx context.Context, sessionID string) error
 	RemoteTerminalAllowed(ctx context.Context, tenantID, deviceID string, groups []string) (bool, error)
+	GetSessionRecording(ctx context.Context, id string) (sessionBytes []byte, err error)
 }
 
 // app is an app object
@@ -248,4 +249,9 @@ func (a *app) RemoteTerminalAllowed(
 		return false, nil
 	}
 	return true, nil
+}
+
+func (a *app) GetSessionRecording(ctx context.Context, id string) (sessionBytes []byte, err error) {
+	sessionBytes, err = a.store.GetSessionRecording(ctx, id)
+	return sessionBytes, err
 }

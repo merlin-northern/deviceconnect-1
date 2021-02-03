@@ -207,6 +207,62 @@ func (h ManagementController) Connect(c *gin.Context) {
 	h.ConnectServeWS(ctx, conn, session, deviceChan)
 }
 
+func (h ManagementController) Playback(c *gin.Context) {
+	ctx := c.Request.Context()
+	l := log.FromContext(ctx)
+
+	idata := identity.FromContext(ctx)
+	if !idata.IsUser {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": ErrMissingUserAuthentication.Error(),
+		})
+		return
+	}
+
+	tenantID := idata.Tenant
+	userID := idata.Subject
+	sessionID := c.Param("sessionId")
+	session := &model.Session{
+		TenantID: tenantID,
+		UserID:   userID,
+		//DeviceID: deviceID,
+		StartTS: time.Now(),
+	}
+
+	l.Infof("Playing back the session %s", sessionID)
+
+	// upgrade get request to websocket protocol
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		Subprotocols:    []string{"protomsg/msgpack"},
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+		Error: func(
+			w http.ResponseWriter, r *http.Request, s int, e error) {
+			rest.RenderError(c, s, e)
+		},
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		err = errors.Wrap(err, "unable to upgrade the request to websocket protocol")
+		l.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal error",
+		})
+		return
+	}
+
+	deviceChan := make(chan *nats.Msg, channelSize)
+	errChan := make(chan error, 1)
+
+	go h.websocketWriter(ctx, conn, session, deviceChan, errChan)
+	go h.playbackSession(ctx, sessionID, deviceChan, errChan)
+	time.Sleep(time.Minute)
+}
+
 func websocketPing(conn *websocket.Conn) bool {
 	pongWaitString := strconv.Itoa(int(pongWait.Seconds()))
 	if err := conn.WriteControl(
@@ -369,5 +425,41 @@ func (h ManagementController) ConnectServeWS(
 		if err != nil {
 			return err
 		}
+	}
+}
+
+func (h ManagementController) playbackSession(ctx context.Context, id string, deviceChan chan *nats.Msg, errChan chan error) {
+	msg := ws.ProtoMsg{
+		Header: ws.ProtoHdr{
+			Proto:     ws.ProtoTypeShell,
+			MsgType:   shell.MessageTypeShellCommand,
+			SessionID: id,
+			Properties: map[string]interface{}{
+				"status": shell.NormalMessage,
+			},
+		},
+		Body: nil,
+	}
+
+	m := nats.Msg{
+		Subject: "playback",
+		Reply:   "no-reply",
+		Data:    nil,
+		Sub:     nil,
+	}
+
+	sessionBytes, _ := h.app.GetSessionRecording(ctx, id)
+	msg.Body = sessionBytes
+	for {
+		msg.Body = sessionBytes
+		data, _ := msgpack.Marshal(msg)
+		m.Data = data
+		deviceChan <- &m
+		time.Sleep(150*time.Millisecond)
+		msg.Body = []byte("--recording-continues--\r\n")
+		data, _ = msgpack.Marshal(msg)
+		m.Data = data
+		deviceChan <- &m
+		time.Sleep(150*time.Millisecond)
 	}
 }

@@ -44,6 +44,7 @@ const (
 
 	APIURLManagementDevice        = APIURLManagement + "/devices/:deviceId"
 	APIURLManagementDeviceConnect = APIURLManagement + "/devices/:deviceId/connect"
+	APIURLManagementPlayback      = APIURLManagement + "/sessions/:sessionId/playback"
 )
 
 // NewRouter returns the gin router
@@ -105,6 +106,7 @@ func NewRouter(
 	management := NewManagementController(app, natsClient)
 	router.GET(APIURLManagementDevice, management.GetDevice)
 	router.GET(APIURLManagementDeviceConnect, management.Connect)
+	router.GET(APIURLManagementPlayback, management.Playback)
 
 	return router, nil
 }

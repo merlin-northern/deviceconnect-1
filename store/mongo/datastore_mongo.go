@@ -297,7 +297,7 @@ func (db *DataStoreMongo) DeleteSession(
 	return sess, nil
 }
 
-// GetSession returns a device
+// GetSession returns a session
 func (db *DataStoreMongo) GetSession(
 	ctx context.Context,
 	sessionID string,
@@ -322,6 +322,11 @@ func (db *DataStoreMongo) GetSession(
 	}
 
 	return session, nil
+}
+
+// GetSession returns a session recording
+func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID string) ([]byte, error) {
+	return []byte("ls -al"), nil
 }
 
 // Close disconnects the client
