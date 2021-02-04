@@ -15,6 +15,7 @@
 package http
 
 import (
+	"bufio"
 	"context"
 	"net/http"
 	"strconv"
@@ -319,10 +320,19 @@ func (h ManagementController) websocketWriter(
 			time.Now().Add(writeWait),
 		)
 	})
+			recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
+			recorderBuffered := bufio.NewWriterSize(recorder, 8192)
 Loop:
 	for {
 		select {
 		case msg := <-deviceChan:
+			mr := &ws.ProtoMsg{}
+			err = msgpack.Unmarshal(msg.Data, mr)
+			if err != nil {
+				return err
+			}
+			recorderBuffered.Write(mr.Body)
+
 			err = conn.WriteMessage(websocket.BinaryMessage, msg.Data)
 			if err != nil {
 				l.Error(err)
@@ -450,7 +460,7 @@ func (h ManagementController) playbackSession(ctx context.Context, id string, de
 
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# echo $HOME\r\n/home/pi\r\n# "))
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# cd /tmp\r\n# mkdir temporary\r\n # logout\r\n"))
-	recorder := model.NewRecorder(id, deviceChan)
+	recorder := app.NewPlayback(id, deviceChan)
 	h.app.GetSessionRecording(ctx, id, recorder)
 	//for {
 	//	sessionBytes, _ := h.app.GetSessionRecording(ctx, id, recorder)

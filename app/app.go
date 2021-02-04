@@ -49,6 +49,7 @@ type App interface {
 	RemoteTerminalAllowed(ctx context.Context, tenantID, deviceID string, groups []string) (bool, error)
 	GetSessionRecording(ctx context.Context, id string, w io.Writer) (err error)
 	SaveSessionRecording(ctx context.Context, id string, sessionBytes []byte) error
+	GetStore() store.DataStore
 }
 
 // app is an app object
@@ -261,4 +262,8 @@ func (a *app) GetSessionRecording(ctx context.Context, id string, w io.Writer) (
 func (a *app) SaveSessionRecording(ctx context.Context, id string, sessionBytes []byte) error {
 	err := a.store.SetSessionRecording(ctx, id, sessionBytes)
 	return err
+}
+
+func (a app) GetStore() store.DataStore {
+	return a.store
 }

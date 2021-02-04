@@ -12,7 +12,7 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-package model
+package app
 
 import (
 	"github.com/mendersoftware/go-lib-micro/ws"
@@ -21,19 +21,19 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-type Recorder struct {
+type Playback struct {
 	sessionID  string
 	deviceChan chan *nats.Msg
 }
 
-func NewRecorder(sessionID string, deviceChan chan *nats.Msg) *Recorder {
-	return &Recorder{
+func NewPlayback(sessionID string, deviceChan chan *nats.Msg) *Playback {
+	return &Playback{
 		deviceChan: deviceChan,
 		sessionID:  sessionID,
 	}
 }
 
-func (r *Recorder) Write(d []byte) (n int, err error) {
+func (r *Playback) Write(d []byte) (n int, err error) {
 	msg := ws.ProtoMsg{
 		Header: ws.ProtoHdr{
 			Proto:     ws.ProtoTypeShell,
@@ -57,5 +57,5 @@ func (r *Recorder) Write(d []byte) (n int, err error) {
 	data, _ := msgpack.Marshal(msg)
 	m.Data = data
 	r.deviceChan <- &m
-	return len(d),nil
+	return len(d), nil
 }
