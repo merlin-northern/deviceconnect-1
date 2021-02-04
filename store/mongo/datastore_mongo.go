@@ -339,7 +339,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 
 	findOptions := mopts.Find()
 	sortField := bson.M{
-		"created_ts":1,
+		"created_ts": 1,
 	}
 	findOptions.SetSort(sortField)
 	c, err := coll.Find(ctx,

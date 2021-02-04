@@ -57,7 +57,7 @@ func (r *Playback) Write(d []byte) (n int, err error) {
 	msg.Body = d
 	data, _ := msgpack.Marshal(msg)
 	m.Data = data
-	time.Sleep(200*time.Millisecond)
+	time.Sleep(800 * time.Millisecond)
 	r.deviceChan <- &m
 	return len(d), nil
 }

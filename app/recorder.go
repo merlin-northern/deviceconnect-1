@@ -34,6 +34,9 @@ func NewRecorder(ctx context.Context, sessionID string, store store.DataStore) *
 }
 
 func (r *Recorder) Write(d []byte) (n int, err error) {
+	if len(r.sessionID) < 1 {
+		return 0, nil
+	}
 	err = r.store.SetSessionRecording(r.ctx, r.sessionID, d)
 
 	if err != nil {

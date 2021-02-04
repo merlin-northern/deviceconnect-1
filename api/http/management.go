@@ -260,8 +260,9 @@ func (h ManagementController) Playback(c *gin.Context) {
 	errChan := make(chan error, 1)
 
 	go h.websocketWriter(ctx, conn, session, deviceChan, errChan)
-	go h.playbackSession(ctx, sessionID, deviceChan, errChan)
-	time.Sleep(time.Minute)
+	//websocketPing(conn) either call somewhere or integrate playback into ConnectServeWS
+	h.playbackSession(ctx, sessionID, deviceChan, errChan)
+	time.Sleep(8 * time.Second)
 }
 
 func websocketPing(conn *websocket.Conn) bool {
@@ -320,8 +321,9 @@ func (h ManagementController) websocketWriter(
 			time.Now().Add(writeWait),
 		)
 	})
-			recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
-			recorderBuffered := bufio.NewWriterSize(recorder, 8192)
+	//so, maybe lets not record the playback, eh?
+	recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
+	recorderBuffered := bufio.NewWriterSize(recorder, 8192)
 Loop:
 	for {
 		select {
@@ -332,7 +334,10 @@ Loop:
 				recorderBuffered.Flush()
 				return err
 			}
-			recorderBuffered.Write(mr.Body)
+			if mr.Header.Proto == ws.ProtoTypeShell &&
+				mr.Header.MsgType == shell.MessageTypeShellCommand {
+				recorderBuffered.Write(mr.Body)
+			}
 
 			err = conn.WriteMessage(websocket.BinaryMessage, msg.Data)
 			if err != nil {
@@ -342,6 +347,7 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		case <-ticker.C:
+			recorderBuffered.Flush()
 			if !websocketPing(conn) {
 				break Loop
 			}
