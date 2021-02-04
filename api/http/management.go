@@ -329,6 +329,7 @@ Loop:
 			mr := &ws.ProtoMsg{}
 			err = msgpack.Unmarshal(msg.Data, mr)
 			if err != nil {
+				recorderBuffered.Flush()
 				return err
 			}
 			recorderBuffered.Write(mr.Body)
@@ -345,9 +346,11 @@ Loop:
 				break Loop
 			}
 		case err := <-errChan:
+			recorderBuffered.Flush()
 			return err
 		}
 	}
+	recorderBuffered.Flush()
 	return err
 }
 

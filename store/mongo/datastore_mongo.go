@@ -30,6 +30,7 @@ import (
 
 	"github.com/mendersoftware/go-lib-micro/config"
 	"github.com/mendersoftware/go-lib-micro/identity"
+	//"github.com/mendersoftware/go-lib-micro/log"
 	"github.com/mendersoftware/go-lib-micro/mongo/migrate"
 	mstore "github.com/mendersoftware/go-lib-micro/store"
 
@@ -336,10 +337,16 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 	coll := db.client.Database(dbname).
 		Collection(RecordingsCollectionName)
 
+	findOptions := mopts.Find()
+	sortField := bson.M{
+		"created_ts":1,
+	}
+	findOptions.SetSort(sortField)
 	c, err := coll.Find(ctx,
 		bson.M{
 			dbFieldSessionID: sessionID,
 		},
+		findOptions,
 	)
 	if err != nil {
 		return err
@@ -352,6 +359,8 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 		CreatedTs time.Time `json:"created_ts" bson:"created_ts"`
 	}
 
+	//l:=log.FromContext(ctx)
+
 	for c.Next(ctx) {
 		var r recData
 		err = c.Decode(&r)
@@ -359,8 +368,11 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 			return err
 		}
 
+		//l.Infof("writing: %s", string(r.Recording))
 		w.Write(r.Recording)
 	}
+
+	w.Write([]byte("\r\n\r\n--recording ends--"))
 
 	//res.Decode(&r)
 	//return r.Recording, nil
