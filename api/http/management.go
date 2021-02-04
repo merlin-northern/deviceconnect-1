@@ -429,37 +429,40 @@ func (h ManagementController) ConnectServeWS(
 }
 
 func (h ManagementController) playbackSession(ctx context.Context, id string, deviceChan chan *nats.Msg, errChan chan error) {
-	msg := ws.ProtoMsg{
-		Header: ws.ProtoHdr{
-			Proto:     ws.ProtoTypeShell,
-			MsgType:   shell.MessageTypeShellCommand,
-			SessionID: id,
-			Properties: map[string]interface{}{
-				"status": shell.NormalMessage,
-			},
-		},
-		Body: nil,
-	}
+	//msg := ws.ProtoMsg{
+	//	Header: ws.ProtoHdr{
+	//		Proto:     ws.ProtoTypeShell,
+	//		MsgType:   shell.MessageTypeShellCommand,
+	//		SessionID: id,
+	//		Properties: map[string]interface{}{
+	//			"status": shell.NormalMessage,
+	//		},
+	//	},
+	//	Body: nil,
+	//}
+	//
+	//m := nats.Msg{
+	//	Subject: "playback",
+	//	Reply:   "no-reply",
+	//	Data:    nil,
+	//	Sub:     nil,
+	//}
 
-	m := nats.Msg{
-		Subject: "playback",
-		Reply:   "no-reply",
-		Data:    nil,
-		Sub:     nil,
-	}
-
-	sessionBytes, _ := h.app.GetSessionRecording(ctx, id)
-	msg.Body = sessionBytes
-	for {
-		msg.Body = sessionBytes
-		data, _ := msgpack.Marshal(msg)
-		m.Data = data
-		deviceChan <- &m
-		time.Sleep(150*time.Millisecond)
-		msg.Body = []byte("--recording-continues--\r\n")
-		data, _ = msgpack.Marshal(msg)
-		m.Data = data
-		deviceChan <- &m
-		time.Sleep(150*time.Millisecond)
-	}
+	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# echo $HOME\r\n/home/pi\r\n# "))
+	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# cd /tmp\r\n# mkdir temporary\r\n # logout\r\n"))
+	recorder := model.NewRecorder(id, deviceChan)
+	h.app.GetSessionRecording(ctx, id, recorder)
+	//for {
+	//	sessionBytes, _ := h.app.GetSessionRecording(ctx, id, recorder)
+	//	msg.Body = sessionBytes
+	//	data, _ := msgpack.Marshal(msg)
+	//	m.Data = data
+	//	deviceChan <- &m
+	//	time.Sleep(150 * time.Millisecond)
+	//	msg.Body = []byte("--recording-continues--\r\n")
+	//	data, _ = msgpack.Marshal(msg)
+	//	m.Data = data
+	//	deviceChan <- &m
+	//	time.Sleep(150 * time.Millisecond)
+	//}
 }

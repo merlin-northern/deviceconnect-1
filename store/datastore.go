@@ -17,6 +17,7 @@ package store
 import (
 	"context"
 	"errors"
+	"io"
 
 	"github.com/mendersoftware/deviceconnect/model"
 )
@@ -33,7 +34,8 @@ type DataStore interface {
 	UpsertDeviceStatus(ctx context.Context, tenantID, deviceID, status string) error
 	AllocateSession(ctx context.Context, sess *model.Session) error
 	GetSession(ctx context.Context, sessionID string) (*model.Session, error)
-	GetSessionRecording(ctx context.Context, sessionID string) ([]byte, error)
+	GetSessionRecording(ctx context.Context, sessionID string, w io.Writer) error
+	SetSessionRecording(ctx context.Context, sessionID string, sessionBytes []byte) error
 	DeleteSession(ctx context.Context, sessionID string) (*model.Session, error)
 	Close() error
 }

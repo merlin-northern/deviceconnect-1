@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -47,6 +48,11 @@ const (
 	// SessionsCollectionName refers to the name of the collection of sessions
 	SessionsCollectionName = "sessions"
 
+	// RecordingsCollectionName name of the collection of session recordings
+	RecordingsCollectionName = "recordings"
+
+	dbFieldSessionID = "session_id"
+	dbFieldRecording = "recording"
 	dbFieldStatus    = "status"
 	dbFieldCreatedTs = "created_ts"
 	dbFieldUpdatedTs = "updated_ts"
@@ -325,8 +331,58 @@ func (db *DataStoreMongo) GetSession(
 }
 
 // GetSession returns a session recording
-func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID string) ([]byte, error) {
-	return []byte("ls -al"), nil
+func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID string, w io.Writer) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	coll := db.client.Database(dbname).
+		Collection(RecordingsCollectionName)
+
+	c, err := coll.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	type recData struct {
+		Id        string    `json:"id" bson:"_id"`
+		SessionID string    `json:"session_id" bson:"session_id"`
+		Recording []byte    `json:"recording" bson:"recording"`
+		CreatedTs time.Time `json:"created_ts" bson:"created_ts"`
+	}
+
+	for c.Next(ctx) {
+		var r recData
+		err = c.Decode(&r)
+		if err != nil {
+			return err
+		}
+
+		w.Write(r.Recording)
+	}
+
+	//res.Decode(&r)
+	//return r.Recording, nil
+	return nil
+}
+
+// SetSession saves a session recording
+func (db *DataStoreMongo) SetSessionRecording(ctx context.Context, sessionID string, sessionBytes []byte) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	coll := db.client.Database(dbname).
+		Collection(RecordingsCollectionName)
+
+	now := clock.Now().UTC()
+
+	_, err := coll.InsertOne(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+			dbFieldRecording: sessionBytes,
+			dbFieldCreatedTs: &now,
+		},
+	)
+	return err
 }
 
 // Close disconnects the client

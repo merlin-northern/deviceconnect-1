@@ -16,6 +16,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,7 +47,8 @@ type App interface {
 	PrepareUserSession(ctx context.Context, sess *model.Session) error
 	FreeUserSession(ctx context.Context, sessionID string) error
 	RemoteTerminalAllowed(ctx context.Context, tenantID, deviceID string, groups []string) (bool, error)
-	GetSessionRecording(ctx context.Context, id string) (sessionBytes []byte, err error)
+	GetSessionRecording(ctx context.Context, id string, w io.Writer) (err error)
+	SaveSessionRecording(ctx context.Context, id string, sessionBytes []byte) error
 }
 
 // app is an app object
@@ -251,7 +253,12 @@ func (a *app) RemoteTerminalAllowed(
 	return true, nil
 }
 
-func (a *app) GetSessionRecording(ctx context.Context, id string) (sessionBytes []byte, err error) {
-	sessionBytes, err = a.store.GetSessionRecording(ctx, id)
-	return sessionBytes, err
+func (a *app) GetSessionRecording(ctx context.Context, id string, w io.Writer) (err error) {
+	err = a.store.GetSessionRecording(ctx, id, w)
+	return err
+}
+
+func (a *app) SaveSessionRecording(ctx context.Context, id string, sessionBytes []byte) error {
+	err := a.store.SetSessionRecording(ctx, id, sessionBytes)
+	return err
 }
