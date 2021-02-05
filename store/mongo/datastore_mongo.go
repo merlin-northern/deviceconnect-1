@@ -70,7 +70,7 @@ func SetupDataStore(automigrate bool) (store.DataStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataStore := NewDataStoreWithClient(dbClient)
+	dataStore := NewDataStoreWithClient(dbClient, time.Second * time.Duration(config.Config.GetInt(dconfig.SettingRecordingExpireSec)))
 	return dataStore, nil
 }
 
@@ -154,12 +154,14 @@ type DataStoreMongo struct {
 	// client holds the reference to the client used to communicate with the
 	// mongodb server.
 	client *mongo.Client
+	recordingExpire time.Duration
 }
 
 // NewDataStoreWithClient initializes a DataStore object
-func NewDataStoreWithClient(client *mongo.Client) store.DataStore {
+func NewDataStoreWithClient(client *mongo.Client, expire time.Duration) store.DataStore {
 	return &DataStoreMongo{
 		client: client,
+		recordingExpire: expire,
 	}
 }
 
@@ -352,17 +354,10 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 		return err
 	}
 
-	type recData struct {
-		Id        string    `json:"id" bson:"_id"`
-		SessionID string    `json:"session_id" bson:"session_id"`
-		Recording []byte    `json:"recording" bson:"recording"`
-		CreatedTs time.Time `json:"created_ts" bson:"created_ts"`
-	}
-
 	//l:=log.FromContext(ctx)
 
 	for c.Next(ctx) {
-		var r recData
+		var r model.Recording
 		err = c.Decode(&r)
 		if err != nil {
 			return err
