@@ -324,6 +324,7 @@ func (h ManagementController) websocketWriter(
 	//so, maybe lets not record the playback, eh?
 	recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
 	recorderBuffered := bufio.NewWriterSize(recorder, 8192)
+	recordedBytes := 0
 Loop:
 	for {
 		select {
@@ -338,6 +339,11 @@ Loop:
 			if mr.Header.Proto == ws.ProtoTypeShell {
 				if mr.Header.MsgType == shell.MessageTypeShellCommand {
 					recorderBuffered.Write(mr.Body)
+					recordedBytes+=len(mr.Body)
+					if recordedBytes >= 64*1024*1024 {
+						l.Infof("closing session on limit reached.")
+						break Loop
+					}
 				} else if mr.Header.MsgType == shell.MessageTypeStopShell {
 					recorderBuffered.Flush()
 				}
