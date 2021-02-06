@@ -120,6 +120,70 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
+  /sessions/{id}/playback:
+    get:
+      tags:
+        - ManagementAPI
+      operationId: Connect
+      summary: Establish a connection for playing back a session
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID for the session to play back.
+        - in: query
+          name: sleep_ms
+          required: false
+          schema:
+            type: string
+          description: Time in millisconds to sleep between the subsequent playback data writes.
+        - in: header
+          name: Connection
+          schema:
+            type: string
+            enum:
+              - Upgrade
+          description: Standard websocket request header.
+        - in: header
+          name: Upgrade
+          schema:
+            type: string
+            format: base64
+            enum:
+              - websocket
+          description: Standard websocket request header.
+        - in: header
+          name: Sec-Websocket-Key
+          schema:
+            type: string
+            format: base64
+          description: Standard websocket request header.
+        - in: header
+          name: Sec-Websocket-Version
+          schema:
+            type: integer
+            enum:
+              - 13
+          description: Standard websocket request header.
+      responses:
+        101:
+          description: |
+            Successful response - change to websocket protocol.
+        400:
+          $ref: '#/components/responses/InvalidRequestError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          description: Session not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
 
 components:
   securitySchemes:
