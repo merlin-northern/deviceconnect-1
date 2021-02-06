@@ -120,15 +120,15 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /sessions/{id}/playback:
+  /sessions/{session_id}/playback:
     get:
       tags:
         - ManagementAPI
-      operationId: Connect
+      operationId: Playback
       summary: Establish a connection for playing back a session
       parameters:
         - in: path
-          name: id
+          name: session_id
           required: true
           schema:
             type: string
