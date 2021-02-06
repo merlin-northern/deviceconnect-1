@@ -15,9 +15,12 @@
 package mongo
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/mendersoftware/go-lib-micro/log"
 	"io"
 	"strings"
 	"time"
@@ -354,8 +357,9 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 		return err
 	}
 
-	//l:=log.FromContext(ctx)
+	l:=log.FromContext(ctx)
 
+	output:=make([]byte,1024)
 	for c.Next(ctx) {
 		var r model.Recording
 		err = c.Decode(&r)
@@ -363,8 +367,24 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 			return err
 		}
 
-		//l.Infof("writing: %s", string(r.Recording))
-		w.Write(r.Recording)
+		var buffer bytes.Buffer
+
+		buffer.Write(r.Recording)
+		gzipReader,err:=gzip.NewReader(&buffer)
+		if err!=nil {
+			l.Errorf("gzip reader error %+v",err)
+		}
+		for {
+		n,err:=gzipReader.Read(output)
+		if n==0 || err!=nil {
+			l.Infof("gzip reader read %d, %+v", n, err)
+			gzipReader.Close()
+			break
+		}
+		l.Infof("writing: %s", string(output[:n]))
+		w.Write(output[:n])
+		}
+		gzipReader.Close()
 	}
 
 	w.Write([]byte("\r\n\r\n--recording ends--"))

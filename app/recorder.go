@@ -15,6 +15,8 @@
 package app
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"github.com/mendersoftware/deviceconnect/store"
 )
@@ -37,7 +39,15 @@ func (r *Recorder) Write(d []byte) (n int, err error) {
 	if len(r.sessionID) < 1 {
 		return 0, nil
 	}
-	err = r.store.SetSessionRecording(r.ctx, r.sessionID, d)
+
+	var buffer bytes.Buffer
+	gzipWriter:=gzip.NewWriter(&buffer)
+	n,err=gzipWriter.Write(d)
+	gzipWriter.Flush()
+	gzipWriter.Close()
+	output:=make([]byte,8192)
+	n,err=buffer.Read(output)
+	err = r.store.SetSessionRecording(r.ctx, r.sessionID, output[:n])
 
 	if err != nil {
 		return -1, err
