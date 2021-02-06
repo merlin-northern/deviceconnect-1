@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/mendersoftware/go-lib-micro/log"
 	"io"
 	"strings"
 	"time"
@@ -73,7 +72,7 @@ func SetupDataStore(automigrate bool) (store.DataStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataStore := NewDataStoreWithClient(dbClient, time.Second * time.Duration(config.Config.GetInt(dconfig.SettingRecordingExpireSec)))
+	dataStore := NewDataStoreWithClient(dbClient, time.Second*time.Duration(config.Config.GetInt(dconfig.SettingRecordingExpireSec)))
 	return dataStore, nil
 }
 
@@ -156,14 +155,14 @@ func NewClient(ctx context.Context, c config.Reader) (*mongo.Client, error) {
 type DataStoreMongo struct {
 	// client holds the reference to the client used to communicate with the
 	// mongodb server.
-	client *mongo.Client
+	client          *mongo.Client
 	recordingExpire time.Duration
 }
 
 // NewDataStoreWithClient initializes a DataStore object
 func NewDataStoreWithClient(client *mongo.Client, expire time.Duration) store.DataStore {
 	return &DataStoreMongo{
-		client: client,
+		client:          client,
 		recordingExpire: expire,
 	}
 }
@@ -357,9 +356,9 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 		return err
 	}
 
-	l:=log.FromContext(ctx)
+	//l := log.FromContext(ctx)
 
-	output:=make([]byte,1024)
+	output := make([]byte, 1024)
 	for c.Next(ctx) {
 		var r model.Recording
 		err = c.Decode(&r)
@@ -370,19 +369,19 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID str
 		var buffer bytes.Buffer
 
 		buffer.Write(r.Recording)
-		gzipReader,err:=gzip.NewReader(&buffer)
-		if err!=nil {
-			l.Errorf("gzip reader error %+v",err)
+		gzipReader, err := gzip.NewReader(&buffer)
+		if err != nil {
+			//l.Errorf("gzip reader error %+v", err)
 		}
 		for {
-		n,err:=gzipReader.Read(output)
-		if n==0 || err!=nil {
-			l.Infof("gzip reader read %d, %+v", n, err)
-			gzipReader.Close()
-			break
-		}
-		l.Infof("writing: %s", string(output[:n]))
-		w.Write(output[:n])
+			n, err := gzipReader.Read(output)
+			if n == 0 || err != nil {
+				//l.Infof("gzip reader read %d, %+v", n, err)
+				gzipReader.Close()
+				break
+			}
+			//l.Infof("writing: %s", string(output[:n]))
+			w.Write(output[:n])
 		}
 		gzipReader.Close()
 	}

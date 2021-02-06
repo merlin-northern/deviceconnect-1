@@ -23,14 +23,16 @@ import (
 )
 
 type Playback struct {
-	sessionID  string
-	deviceChan chan *nats.Msg
+	sessionID         string
+	deviceChan        chan *nats.Msg
+	sleepMilliseconds uint
 }
 
-func NewPlayback(sessionID string, deviceChan chan *nats.Msg) *Playback {
+func NewPlayback(sessionID string, deviceChan chan *nats.Msg, sleepMilliseconds uint) *Playback {
 	return &Playback{
-		deviceChan: deviceChan,
-		sessionID:  sessionID,
+		deviceChan:        deviceChan,
+		sessionID:         sessionID,
+		sleepMilliseconds: sleepMilliseconds,
 	}
 }
 
@@ -57,7 +59,7 @@ func (r *Playback) Write(d []byte) (n int, err error) {
 	msg.Body = d
 	data, _ := msgpack.Marshal(msg)
 	m.Data = data
-	time.Sleep(800 * time.Millisecond)
+	time.Sleep(time.Duration(r.sleepMilliseconds) * time.Millisecond)
 	r.deviceChan <- &m
 	return len(d), nil
 }

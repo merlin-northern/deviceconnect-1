@@ -229,6 +229,14 @@ func (h ManagementController) Playback(c *gin.Context) {
 		//DeviceID: deviceID,
 		StartTS: time.Now(),
 	}
+	sleepInterval := c.Param("sleep_ms")
+	sleepMilliseconds := uint(100)
+	if len(sleepInterval) > 1 {
+		n, err := strconv.ParseUint(sleepInterval, 10, 32)
+		if err != nil {
+			sleepMilliseconds = uint(n)
+		}
+	}
 
 	l.Infof("Playing back the session %s", sessionID)
 
@@ -261,7 +269,7 @@ func (h ManagementController) Playback(c *gin.Context) {
 
 	go h.websocketWriter(ctx, conn, session, deviceChan, errChan)
 	//websocketPing(conn) either call somewhere or integrate playback into ConnectServeWS
-	h.playbackSession(ctx, sessionID, deviceChan, errChan)
+	h.playbackSession(ctx, sessionID, deviceChan, errChan, sleepMilliseconds)
 	time.Sleep(8 * time.Second)
 }
 
@@ -323,7 +331,7 @@ func (h ManagementController) websocketWriter(
 	})
 	//so, maybe lets not record the playback, eh?
 	recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
-	recorderBuffered := bufio.NewWriterSize(recorder, 8192)
+	recorderBuffered := bufio.NewWriterSize(recorder, 4*4455) //h*w try // 8192)
 	recordedBytes := 0
 Loop:
 	for {
@@ -333,18 +341,19 @@ Loop:
 			err = msgpack.Unmarshal(msg.Data, mr)
 			if err != nil {
 				recorderBuffered.Flush()
-				l.Infof("recorderBuffered.Flush()")
+				l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
 				return err
 			}
 			if mr.Header.Proto == ws.ProtoTypeShell {
 				if mr.Header.MsgType == shell.MessageTypeShellCommand {
 					recorderBuffered.Write(mr.Body)
-					recordedBytes+=len(mr.Body)
-					if recordedBytes >= 64*1024*1024 {
+					recordedBytes += len(mr.Body)
+					if recordedBytes >= 8*1024*1024 {
 						l.Infof("closing session on limit reached.")
 						break Loop
 					}
 				} else if mr.Header.MsgType == shell.MessageTypeStopShell {
+					l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
 					recorderBuffered.Flush()
 				}
 			}
@@ -358,18 +367,18 @@ Loop:
 			break Loop
 		case <-ticker.C:
 			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush()")
+			l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
 			if !websocketPing(conn) {
 				break Loop
 			}
 		case err := <-errChan:
 			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush()")
+			l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
 			return err
 		}
 	}
 	recorderBuffered.Flush()
-	l.Infof("recorderBuffered.Flush()")
+	l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
 	return err
 }
 
@@ -460,7 +469,7 @@ func (h ManagementController) ConnectServeWS(
 	}
 }
 
-func (h ManagementController) playbackSession(ctx context.Context, id string, deviceChan chan *nats.Msg, errChan chan error) {
+func (h ManagementController) playbackSession(ctx context.Context, id string, deviceChan chan *nats.Msg, errChan chan error, sleepMilliseconds uint) {
 	//msg := ws.ProtoMsg{
 	//	Header: ws.ProtoHdr{
 	//		Proto:     ws.ProtoTypeShell,
@@ -482,7 +491,7 @@ func (h ManagementController) playbackSession(ctx context.Context, id string, de
 
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# echo $HOME\r\n/home/pi\r\n# "))
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# cd /tmp\r\n# mkdir temporary\r\n # logout\r\n"))
-	recorder := app.NewPlayback(id, deviceChan)
+	recorder := app.NewPlayback(id, deviceChan, sleepMilliseconds)
 	h.app.GetSessionRecording(ctx, id, recorder)
 	//for {
 	//	sessionBytes, _ := h.app.GetSessionRecording(ctx, id, recorder)

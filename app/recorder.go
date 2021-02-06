@@ -41,12 +41,12 @@ func (r *Recorder) Write(d []byte) (n int, err error) {
 	}
 
 	var buffer bytes.Buffer
-	gzipWriter:=gzip.NewWriter(&buffer)
-	n,err=gzipWriter.Write(d)
+	gzipWriter := gzip.NewWriter(&buffer)
+	n, err = gzipWriter.Write(d)
 	gzipWriter.Flush()
 	gzipWriter.Close()
-	output:=make([]byte,8192)
-	n,err=buffer.Read(output)
+	output := make([]byte, 8192)
+	n, err = buffer.Read(output)
 	err = r.store.SetSessionRecording(r.ctx, r.sessionID, output[:n])
 
 	if err != nil {
