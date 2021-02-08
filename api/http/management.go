@@ -17,6 +17,7 @@ package http
 import (
 	"bufio"
 	"context"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -268,9 +269,10 @@ func (h ManagementController) Playback(c *gin.Context) {
 	deviceChan := make(chan *nats.Msg, channelSize)
 	errChan := make(chan error, 1)
 
-	go h.websocketWriter(ctx, conn, session, deviceChan, errChan, true)
+	go h.websocketWriter(ctx, conn, session, deviceChan, errChan, ioutil.Discard)
 	//websocketPing(conn) either call somewhere or integrate playback into ConnectServeWS
-	h.playbackSession(ctx, sessionID, deviceChan, errChan, sleepMilliseconds)
+	h.app.GetSessionRecording(ctx, sessionID, app.NewPlayback(sessionID, deviceChan, sleepMilliseconds))
+	//h.playbackSession(ctx, sessionID, deviceChan, errChan, sleepMilliseconds)
 	//time.Sleep(8 * time.Second)
 }
 
@@ -296,7 +298,7 @@ func (h ManagementController) websocketWriter(
 	session *model.Session,
 	deviceChan <-chan *nats.Msg,
 	errChan <-chan error,
-	playback bool,
+	recorder io.Writer,
 ) (err error) {
 	l := log.FromContext(ctx)
 	defer func() {
@@ -333,13 +335,9 @@ func (h ManagementController) websocketWriter(
 	})
 
 	//so, maybe lets not record the playback, eh?
-	recorder := app.NewRecorder(ctx, session.ID, h.app.GetStore())
-	var recorderBuffered *bufio.Writer
-	if playback {
-		recorderBuffered = bufio.NewWriterSize(ioutil.Discard, 4*4455) //h*w try // 8192)
-	} else {
-		recorderBuffered = bufio.NewWriterSize(recorder, 4*4455) //h*w try // 8192)
-	}
+	//move recorder to param to this method
+	recorderBuffered := bufio.NewWriterSize(recorder, 4*4455) //h*w try // 8192)
+	defer recorderBuffered.Flush()
 	recordedBytes := 0
 Loop:
 	for {
@@ -348,21 +346,21 @@ Loop:
 			mr := &ws.ProtoMsg{}
 			err = msgpack.Unmarshal(msg.Data, mr)
 			if err != nil {
-				recorderBuffered.Flush()
-				l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 				return err
 			}
 			if mr.Header.Proto == ws.ProtoTypeShell {
 				if mr.Header.MsgType == shell.MessageTypeShellCommand {
 					b, e := recorderBuffered.Write(mr.Body)
-					l.Infof("recorderBuffered.Write(%s)=%d,%+v", string(mr.Body), b, e)
+					if e != nil {
+						l.Errorf("session logging: recorderBuffered.Write(len=%d)=%d,%+v", len(mr.Body), b, e)
+					}
 					recordedBytes += len(mr.Body)
 					if recordedBytes >= 8*1024*1024 {
-						l.Infof("closing session on limit reached.")
+						l.Infof("closing session on limit reached.") //see https://tracker.mender.io/browse/MEN-4448
 						break Loop
 					}
 				} else if mr.Header.MsgType == shell.MessageTypeStopShell {
-					l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
+					l.Debugf("session logging: recorderBuffered.Flush() at %d on stop shell", recordedBytes)
 					recorderBuffered.Flush()
 				}
 			}
@@ -376,18 +374,14 @@ Loop:
 			break Loop
 		case <-ticker.C:
 			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
+			l.Debugf("session logging: recorderBuffered.Flush() at %d on ticker", recordedBytes)
 			if !websocketPing(conn) {
 				break Loop
 			}
 		case err := <-errChan:
-			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 			return err
 		}
 	}
-	recorderBuffered.Flush()
-	l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 	return err
 }
 
@@ -442,7 +436,7 @@ func (h ManagementController) ConnectServeWS(
 	}()
 	// websocketWriter is responsible for closing the websocket
 	//nolint:errcheck
-	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, false)
+	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, app.NewRecorder(ctx, sess.ID, h.app.GetStore()))
 
 	var data []byte
 	for {
@@ -468,6 +462,7 @@ func (h ManagementController) ConnectServeWS(
 
 		if m.Header.Proto == ws.ProtoTypeShell &&
 			m.Header.MsgType == shell.MessageTypeStopShell {
+			l.Infof("this is MessageTypeStopShell")
 			sessionClosed = true
 		}
 
@@ -500,7 +495,7 @@ func (h ManagementController) playbackSession(ctx context.Context, id string, de
 
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# echo $HOME\r\n/home/pi\r\n# "))
 	//h.app.SaveSessionRecording(ctx, "some-id", []byte("# cd /tmp\r\n# mkdir temporary\r\n # logout\r\n"))
-	h.app.GetSessionRecording(ctx, id, app.NewPlayback(id, deviceChan, sleepMilliseconds))
+	// // h.app.GetSessionRecording(ctx, id, app.NewPlayback(id, deviceChan, sleepMilliseconds))
 	//for {
 	//	sessionBytes, _ := h.app.GetSessionRecording(ctx, id, recorder)
 	//	msg.Body = sessionBytes

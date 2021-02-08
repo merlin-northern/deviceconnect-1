@@ -27,6 +27,10 @@ type Recorder struct {
 	ctx       context.Context
 }
 
+const (
+	gzipHeaderSize = 10
+)
+
 func NewRecorder(ctx context.Context, sessionID string, store store.DataStore) *Recorder {
 	return &Recorder{
 		ctx:       ctx,
@@ -45,7 +49,9 @@ func (r *Recorder) Write(d []byte) (n int, err error) {
 	n, err = gzipWriter.Write(d)
 	gzipWriter.Flush()
 	gzipWriter.Close()
-	output := make([]byte, 8192)
+	//the worst case scenario: the compression ratio was 0% and the resulting
+	//buffer is larger than the original by the length of the gzip header, one added for extra safety
+	output := make([]byte, len(d)+gzipHeaderSize+1)
 	n, err = buffer.Read(output)
 	err = r.store.SetSessionRecording(r.ctx, r.sessionID, output[:n])
 
