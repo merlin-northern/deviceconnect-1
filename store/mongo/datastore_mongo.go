@@ -402,7 +402,7 @@ func (db *DataStoreMongo) SetSessionRecording(ctx context.Context, sessionID str
 
 	now := clock.Now().UTC()
 	recording := model.Recording{
-		ID: oid.NewBSONID(),
+		ID:        oid.NewBSONID(),
 		SessionID: sessionID,
 		Recording: sessionBytes,
 		CreatedTs: now,
