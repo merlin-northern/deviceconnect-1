@@ -100,5 +100,6 @@ var (
 		{Key: SettingInventoryTimeout, Value: SettingInventoryTimeoutDefault},
 		{Key: SettingWorkflowsURL, Value: SettingWorkflowsURLDefault},
 		{Key: SettingEnableAuditLogs, Value: SettingEnableAuditLogsDefault},
+		{Key: SettingRecordingExpireSec, Value: SettingRecordingExpireDefault},
 	}
 )

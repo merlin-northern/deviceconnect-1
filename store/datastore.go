@@ -17,9 +17,8 @@ package store
 import (
 	"context"
 	"errors"
-	"io"
-
 	"github.com/mendersoftware/deviceconnect/model"
+	"io"
 )
 
 // DataStore interface for DataStore services

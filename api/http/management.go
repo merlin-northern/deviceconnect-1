@@ -341,7 +341,7 @@ Loop:
 			err = msgpack.Unmarshal(msg.Data, mr)
 			if err != nil {
 				recorderBuffered.Flush()
-				l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
+				l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 				return err
 			}
 			if mr.Header.Proto == ws.ProtoTypeShell {
@@ -353,7 +353,7 @@ Loop:
 						break Loop
 					}
 				} else if mr.Header.MsgType == shell.MessageTypeStopShell {
-					l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
+					l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 					recorderBuffered.Flush()
 				}
 			}
@@ -367,18 +367,18 @@ Loop:
 			break Loop
 		case <-ticker.C:
 			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
+			l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 			if !websocketPing(conn) {
 				break Loop
 			}
 		case err := <-errChan:
 			recorderBuffered.Flush()
-			l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
+			l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 			return err
 		}
 	}
 	recorderBuffered.Flush()
-	l.Infof("recorderBuffered.Flush() ar %d", recordedBytes)
+	l.Infof("recorderBuffered.Flush() at %d", recordedBytes)
 	return err
 }
 

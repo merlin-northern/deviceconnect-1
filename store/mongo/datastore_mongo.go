@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/mendersoftware/go-lib-micro/mongo/oid"
 	"io"
 	"strings"
 	"time"
@@ -400,13 +401,20 @@ func (db *DataStoreMongo) SetSessionRecording(ctx context.Context, sessionID str
 		Collection(RecordingsCollectionName)
 
 	now := clock.Now().UTC()
-
+	recording := model.Recording{
+		ID: oid.NewBSONID(),
+		SessionID: sessionID,
+		Recording: sessionBytes,
+		CreatedTs: now,
+		ExpireTs:  now.Add(db.recordingExpire),
+	}
 	_, err := coll.InsertOne(ctx,
-		bson.M{
-			dbFieldSessionID: sessionID,
-			dbFieldRecording: sessionBytes,
-			dbFieldCreatedTs: &now,
-		},
+		&recording,
+		//bson.M{
+		//	dbFieldSessionID: sessionID,
+		//	dbFieldRecording: sessionBytes,
+		//	dbFieldCreatedTs: &now,
+		//},
 	)
 	return err
 }
