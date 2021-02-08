@@ -15,9 +15,13 @@
 package mongo
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/mendersoftware/go-lib-micro/mongo/oid"
+	"io"
 	"strings"
 	"time"
 
@@ -38,7 +42,10 @@ import (
 	"github.com/mendersoftware/deviceconnect/utils"
 )
 
-var clock utils.Clock = utils.RealClock{}
+var (
+	clock                   utils.Clock = utils.RealClock{}
+	recordingReadBufferSize             = 1024
+)
 
 const (
 	// DevicesCollectionName refers to the name of the collection of stored devices
@@ -47,6 +54,11 @@ const (
 	// SessionsCollectionName refers to the name of the collection of sessions
 	SessionsCollectionName = "sessions"
 
+	// RecordingsCollectionName name of the collection of session recordings
+	RecordingsCollectionName = "recordings"
+
+	dbFieldSessionID = "session_id"
+	dbFieldRecording = "recording"
 	dbFieldStatus    = "status"
 	dbFieldCreatedTs = "created_ts"
 	dbFieldUpdatedTs = "updated_ts"
@@ -63,7 +75,7 @@ func SetupDataStore(automigrate bool) (store.DataStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataStore := NewDataStoreWithClient(dbClient)
+	dataStore := NewDataStoreWithClient(dbClient, time.Second*time.Duration(config.Config.GetInt(dconfig.SettingRecordingExpireSec)))
 	return dataStore, nil
 }
 
@@ -146,13 +158,15 @@ func NewClient(ctx context.Context, c config.Reader) (*mongo.Client, error) {
 type DataStoreMongo struct {
 	// client holds the reference to the client used to communicate with the
 	// mongodb server.
-	client *mongo.Client
+	client          *mongo.Client
+	recordingExpire time.Duration
 }
 
 // NewDataStoreWithClient initializes a DataStore object
-func NewDataStoreWithClient(client *mongo.Client) store.DataStore {
+func NewDataStoreWithClient(client *mongo.Client, expire time.Duration) store.DataStore {
 	return &DataStoreMongo{
-		client: client,
+		client:          client,
+		recordingExpire: expire,
 	}
 }
 
@@ -297,7 +311,7 @@ func (db *DataStoreMongo) DeleteSession(
 	return sess, nil
 }
 
-// GetSession returns a device
+// GetSession returns a session
 func (db *DataStoreMongo) GetSession(
 	ctx context.Context,
 	sessionID string,
@@ -322,6 +336,76 @@ func (db *DataStoreMongo) GetSession(
 	}
 
 	return session, nil
+}
+
+// GetSession writes session recordings to given io.Writer
+func (db *DataStoreMongo) GetSessionRecording(ctx context.Context, sessionID string, w io.Writer) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	coll := db.client.Database(dbname).
+		Collection(RecordingsCollectionName)
+
+	findOptions := mopts.Find()
+	sortField := bson.M{
+		"created_ts": 1,
+	}
+	findOptions.SetSort(sortField)
+	c, err := coll.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+		findOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	output := make([]byte, recordingReadBufferSize)
+	for c.Next(ctx) {
+		var r model.Recording
+		err = c.Decode(&r)
+		if err != nil {
+			return err
+		}
+
+		var buffer bytes.Buffer
+
+		buffer.Write(r.Recording)
+		gzipReader, e := gzip.NewReader(&buffer)
+		if e != nil {
+			err = e
+		}
+		for {
+			n, err := gzipReader.Read(output)
+			if n == 0 || err != nil {
+				gzipReader.Close()
+				break
+			}
+			w.Write(output[:n])
+		}
+		gzipReader.Close()
+	}
+
+	return err
+}
+
+// SetSession saves a session recording
+func (db *DataStoreMongo) SetSessionRecording(ctx context.Context, sessionID string, sessionBytes []byte) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	coll := db.client.Database(dbname).
+		Collection(RecordingsCollectionName)
+
+	now := clock.Now().UTC()
+	recording := model.Recording{
+		ID:        oid.NewBSONID(),
+		SessionID: sessionID,
+		Recording: sessionBytes,
+		CreatedTs: now,
+		ExpireTs:  now.Add(db.recordingExpire),
+	}
+	_, err := coll.InsertOne(ctx,
+		&recording,
+	)
+	return err
 }
 
 // Close disconnects the client
