@@ -28,8 +28,6 @@ type Recorder struct {
 }
 
 const (
-	gzipHeaderSize = 10
-
 	//It is used as a length of a memory region in bytes that is used to buffer
 	//the session recording. 4455 comes from the estimated typical terminal size in
 	//bytes (height=135 width=33) multiplied by 4 bytes of of terminal codes to get
@@ -57,7 +55,7 @@ func (r *Recorder) Write(d []byte) (n int, err error) {
 	gzipWriter.Close()
 	//the worst case scenario: the compression ratio was 0% and the resulting
 	//buffer is larger than the original by the length of the gzip header, one added for extra safety
-	output := make([]byte, len(d)+gzipHeaderSize+1)
+	output := buffer.Bytes()
 	n, err = buffer.Read(output)
 	err = r.store.SetSessionRecording(r.ctx, r.sessionID, output[:n])
 

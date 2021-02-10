@@ -284,6 +284,7 @@ func (h ManagementController) Playback(c *gin.Context) {
 	go h.websocketWriter(ctx, conn, session, deviceChan, errChan, ioutil.Discard)
 
 	h.app.GetSessionRecording(ctx, sessionID, app.NewPlayback(sessionID, deviceChan, sleepMilliseconds))
+	time.Sleep(time.Minute)
 	//after this point the UI has to keep the terminal window open by itself to let user
 	//see the playback -- the websocket connection to the deviceconnect is going to be closed
 }
@@ -446,7 +447,7 @@ func (h ManagementController) ConnectServeWS(
 	}()
 	// websocketWriter is responsible for closing the websocket
 	//nolint:errcheck
-	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, app.NewRecorder(ctx, sess.ID, h.app.GetStore()))
+	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, h.app.GetRecorder(ctx, sess.ID))
 
 	var data []byte
 	for {
