@@ -240,7 +240,6 @@ func (h ManagementController) Playback(c *gin.Context) {
 	session := &model.Session{
 		TenantID: tenantID,
 		UserID:   userID,
-		//DeviceID: deviceID,
 		StartTS: time.Now(),
 	}
 	sleepInterval := c.Param(PlaybackSleepIntervalMsField)
@@ -384,8 +383,6 @@ Loop:
 		case <-ctx.Done():
 			break Loop
 		case <-ticker.C:
-			recorderBuffered.Flush()
-			l.Debugf("session logging: recorderBuffered.Flush() at %d on ticker", recordedBytes)
 			if !websocketPing(conn) {
 				break Loop
 			}
