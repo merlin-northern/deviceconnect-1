@@ -27,5 +27,3 @@ type ControlData struct {
 	CreatedTs time.Time `json:"created_ts" bson:"created_ts"`
 	ExpireTs  time.Time `json:"expire_ts" bson:"expire_ts"`
 }
-
-

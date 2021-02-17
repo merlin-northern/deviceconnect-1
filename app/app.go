@@ -270,5 +270,5 @@ func (a app) GetRecorder(ctx context.Context, sessionID string) *Recorder {
 }
 
 func (a app) GetControlRecorder(ctx context.Context, sessionID string) *Recorder {
-	return NewControlRecorder(ctx, sessionID, a.store)
+	return nil
 }

@@ -20,7 +20,11 @@ const (
 )
 
 type Control struct {
-	Type byte
+	Type           byte
+	Offset         uint16
+	DelayMs        uint16
+	TerminalWidth  uint16
+	TerminalHeight uint16
 }
 
 func (c Control) GetBytes() []byte {

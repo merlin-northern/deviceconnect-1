@@ -19,6 +19,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"github.com/mendersoftware/deviceconnect/app"
 	"testing"
 	"time"
 
@@ -607,6 +608,83 @@ func TestSetSessionRecording(t *testing.T) {
 				assert.EqualError(t, err, "mongo: no documents in result")
 			} else {
 				assert.Equal(t, tc.RecordingData, r.Recording)
+			}
+		})
+	}
+}
+
+func TestPopControlMessage(t *testing.T) {
+	testCases := []struct {
+		Name string
+
+		Ctx         context.Context
+		SessionID   string
+		ControlData string
+		Message     *app.Control
+
+		Error error
+	}{
+		{
+			Name: "ok",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000000",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4
+			//echo -n -e '\x02\x20\x00\x08\x00' | gzip - | base64
+			ControlData: "H4sIAOmlLWAAA2NSYOBgAABLgQnUBQAAAA==",
+			Message: &app.Control{
+				Type:           app.DelayMessage, // offset0 \x02
+				Offset:         32,               // offset 1-2 \x20\x00
+				DelayMs:        8,                // offset 3-4 \x08\x00
+				TerminalWidth:  0,
+				TerminalHeight: 0,
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.Name, func(t *testing.T) {
+			ds := &DataStoreMongo{client: db.Client()}
+			defer ds.DropDatabase()
+
+			database := db.Client().Database(mstore.DbNameForTenant(
+				"000000000000000000000000", DbName,
+			))
+			collSess := database.Collection(ControlCollectionName)
+			d, err := base64.StdEncoding.DecodeString(tc.ControlData)
+			assert.NoError(t, err)
+
+			_, err = collSess.InsertOne(nil, &model.ControlData{
+				ID:        uuid.New(),
+				SessionID: tc.SessionID,
+				Control:   d,
+				CreatedTs: time.Now().UTC(),
+				ExpireTs:  time.Now().UTC(),
+			})
+			assert.NoError(t, err)
+
+			c, err := collSess.Find(nil, bson.M{
+				dbFieldSessionID: tc.SessionID,
+			})
+			assert.NotNil(t, c)
+			assert.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
+			defer cancel()
+
+			r := NewControlMessageReader(ctx, c)
+			assert.NotNil(t, r)
+			m := r.Pop()
+			t.Logf("popped message: %+v", m)
+			if tc.Error != nil {
+			} else {
+				assert.Equal(t, tc.Message, m)
 			}
 		})
 	}
