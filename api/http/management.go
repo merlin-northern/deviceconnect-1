@@ -283,7 +283,7 @@ func (h ManagementController) Playback(c *gin.Context) {
 	errChan := make(chan error, 1)
 
 	//nolint:errcheck
-	go h.websocketWriter(ctx, conn, session, deviceChan, errChan, ioutil.Discard)
+	go h.websocketWriter(ctx, conn, session, deviceChan, errChan, ioutil.Discard, ioutil.Discard)
 
 	err = h.app.GetSessionRecording(ctx,
 		sessionID,
@@ -323,6 +323,7 @@ func (h ManagementController) websocketWriter(
 	deviceChan <-chan *natsio.Msg,
 	errChan <-chan error,
 	recorder io.Writer,
+	controlRecorder io.Writer,
 ) (err error) {
 	l := log.FromContext(ctx)
 	defer func() {
@@ -360,7 +361,10 @@ func (h ManagementController) websocketWriter(
 
 	recorderBuffered := bufio.NewWriterSize(recorder, app.RecorderBufferSize)
 	defer recorderBuffered.Flush()
+	controlRecorderBuffered := bufio.NewWriterSize(controlRecorder, app.RecorderBufferSize)
+	defer controlRecorderBuffered.Flush()
 	recordedBytes := 0
+	controlRecordedBytes := 0
 Loop:
 	for {
 		select {
@@ -371,7 +375,8 @@ Loop:
 				return err
 			}
 			if mr.Header.Proto == ws.ProtoTypeShell {
-				if mr.Header.MsgType == shell.MessageTypeShellCommand {
+				switch mr.Header.MsgType {
+				case shell.MessageTypeShellCommand:
 					b, e := recorderBuffered.Write(mr.Body)
 					if e != nil {
 						l.Errorf("session logging: "+
@@ -384,10 +389,20 @@ Loop:
 						//see https://tracker.mender.io/browse/MEN-4448
 						break Loop
 					}
-				} else if mr.Header.MsgType == shell.MessageTypeStopShell {
+				case shell.MessageTypeStopShell:
 					l.Debugf("session logging: recorderBuffered.Flush()"+
 						" at %d on stop shell", recordedBytes)
 					recorderBuffered.Flush()
+					controlRecorderBuffered.Flush()
+				case shell.MessageTypeResizeShell:
+					controlRecordedBytes += 4 * len(mr.Header.Properties)
+					if controlRecordedBytes >= app.MessageSizeLimit {
+						l.Infof("closing session on control data limit reached.")
+						//see https://tracker.mender.io/browse/MEN-4448
+						break Loop
+					}
+					controlMsg := app.Control{Type: app.ResizeMessage}
+					controlRecorderBuffered.Write(controlMsg.GetBytes())
 				}
 			}
 
@@ -462,7 +477,7 @@ func (h ManagementController) ConnectServeWS(
 
 	// websocketWriter is responsible for closing the websocket
 	//nolint:errcheck
-	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, h.app.GetRecorder(ctx, sess.ID))
+	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, h.app.GetRecorder(ctx, sess.ID), h.app.GetControlRecorder(ctx, sess.ID))
 
 	var data []byte
 	for {

@@ -19,7 +19,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
+	"github.com/mendersoftware/deviceconnect/app"
 	"io"
 	"strings"
 	"time"
@@ -56,6 +58,9 @@ const (
 
 	// RecordingsCollectionName name of the collection of session recordings
 	RecordingsCollectionName = "recordings"
+
+	// ControlCollectionName name of the collection of session control data
+	ControlCollectionName = "control"
 
 	dbFieldSessionID = "session_id"
 	dbFieldStatus    = "status"
@@ -342,9 +347,17 @@ func (db *DataStoreMongo) GetSession(
 func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	sessionID string,
 	w io.Writer) error {
+	/*
+		1. Find all ControlRecordings, Find all Recordings
+		2. traverse ControlRecordings, for each: get offset if it is within currentRecording buffer
+		   send up to offset bytes, send control message, continue to next control recording
+		3. send the rest of the currentRecording
+	*/
 	dbname := mstore.DbFromContext(ctx, DbName)
 	coll := db.client.Database(dbname).
 		Collection(RecordingsCollectionName)
+	controlColl := db.client.Database(dbname).
+		Collection(ControlCollectionName)
 
 	findOptions := mopts.Find()
 	sortField := bson.M{
@@ -361,8 +374,93 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 		return err
 	}
 
+	control, err := controlColl.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+		findOptions,
+	)
+	if err != nil {
+		return err
+	}
+
 	output := make([]byte, recordingReadBufferSize)
 	var buffer bytes.Buffer
+
+	for control.Next(ctx) {
+		var r model.ControlData
+		err = control.Decode(&r)
+		if err != nil {
+			return err
+		}
+
+		buffer.Reset()
+		buffer.Write(r.Control)
+		gzipReader, e := gzip.NewReader(&buffer)
+		if e != nil {
+			err = e
+		}
+
+		offset:=0
+		for {
+			n, e := gzipReader.Read(output)
+			if n == 0 || e != nil {
+				break
+			}
+
+			//now here we can start deserializing the control messages
+			//output[:n] contains the uncompressed buffer
+			// +---------+---------+
+			// | type: 1 | data: l |
+			// +---------+---------+
+			// where l is type-dependent
+			if n < 5 {
+				gzipReader.Close()
+				break
+			}
+			controlMessageBuffer:=output[:n]
+			var recordingOffset uint16 = 0
+			switch controlMessageBuffer[offset] {
+			case app.DelayMessage:
+				offset++
+				recordingOffset=binary.LittleEndian.Uint16(controlMessageBuffer[:offset])
+				offset++
+				offset++
+				delayMilliSeconds:=binary.LittleEndian.Uint16(controlMessageBuffer[:offset])
+				offset++
+				offset++
+				if delayMilliSeconds > 0 && recordingOffset > 0 {
+
+				}
+			case app.ResizeMessage:
+				offset++
+				recordingOffset=binary.LittleEndian.Uint16(controlMessageBuffer[:offset])
+				offset++
+				offset++
+				width:=binary.LittleEndian.Uint16(controlMessageBuffer[:offset])
+				offset++
+				offset++
+				height:=binary.LittleEndian.Uint16(controlMessageBuffer[:offset])
+				offset++
+				offset++
+				if height > 0 && width > 0 && recordingOffset > 0 {
+
+				}
+			default:
+				break
+			}
+
+			if recordingOffset <= recordingBufferSize {
+				//this means we are inside the currently read recording, and we need to send up to the
+				//recordingOffset bytes of the recording and then send the control message, and continue
+			} else {
+				//this means that the control message is in the future of the recording
+				//we can send the whole recording and read the next one.
+			}
+		}
+		gzipReader.Close()
+	}
+
 	for c.Next(ctx) {
 		var r model.Recording
 		err = c.Decode(&r)
