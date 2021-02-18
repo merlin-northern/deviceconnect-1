@@ -382,9 +382,10 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 		return err
 	}
 
-	controlMsgs:=NewControlMessageReader(ctx, controlCursor)
+	recordingBytesSent := 0
+	controlMsgs := NewControlMessageReader(ctx, controlCursor)
 	for {
-		control:=controlMsgs.Pop()
+		control := controlMsgs.Pop()
 		if control == nil {
 			// send the whole recording, there is no more control data
 			output := make([]byte, recordingReadBufferSize)
@@ -423,9 +424,52 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 			//1. send until we reach the recording within which the control.Offset lies
 			//2. send up to control.Offset bytes
 			//3. send the control message, get the next control message
+			output := make([]byte, recordingReadBufferSize)
+			var buffer bytes.Buffer
+			for c.Next(ctx) {
+				var r model.Recording
+				err = c.Decode(&r)
+				if err != nil {
+					return err
+				}
+
+				buffer.Reset()
+				buffer.Write(r.Recording)
+				gzipReader, e := gzip.NewReader(&buffer)
+				if e != nil {
+					err = e
+				}
+
+				for {
+					n, e := gzipReader.Read(output)
+					if n == 0 || e != nil {
+						gzipReader.Close()
+						break
+					}
+					// read n bytes output[:n]
+					if recordingBytesSent > int(control.Offset) {
+						//this is very strange -- seems we missed this control message
+						break
+					}
+					bytesToSend := int(control.Offset) - recordingBytesSent
+					if bytesToSend < n {
+						_, e = w.Write(output[:bytesToSend])
+						if e != nil {
+							err = e
+						}
+						recordingBytesSent += bytesToSend
+					} else {
+						_, e = w.Write(output[:n])
+						if e != nil {
+							err = e
+						}
+						recordingBytesSent += n
+					}
+				}
+				gzipReader.Close()
+			}
 		}
 	}
-
 
 	return err
 }
