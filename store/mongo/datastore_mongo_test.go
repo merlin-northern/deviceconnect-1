@@ -645,11 +645,54 @@ func TestPopControlMessage(t *testing.T) {
 				TerminalHeight: 0,
 			},
 		},
+		{
+			Name: "error unknown message type",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000001",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4
+			//echo -n -e '\x22\x20\x00\x08\x00' | gzip - | base64
+			ControlData: "H4sIAHurLWAAA1NSYOBgAABPrsgVBQAAAA==",
+		},
+		{
+			Name: "error buffer does not coantin a full message",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000001",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000002",
+			//            0    1   2   3   4
+			//echo -n -e '\x02\x20\x00\x08' | gzip - | base64
+			ControlData: "H4sIAOisLWAAA2NSYOAAAEXZ270EAAAA",
+		},
+		{
+			Name: "error buffer too short to contain any message",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000001",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000002",
+			//            0    1   2   3   4
+			//echo -n -e '\x02\x20' | gzip - | base64
+			ControlData: "H4sIAHuuLWAAA2NSAAC1UIFIAgAAAA==",
+		},
 	}
 
 	for i := range testCases {
 		tc := testCases[i]
 		t.Run(tc.Name, func(t *testing.T) {
+			db.Wipe()
 			ds := &DataStoreMongo{client: db.Client()}
 			defer ds.DropDatabase()
 

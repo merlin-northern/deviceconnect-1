@@ -19,6 +19,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/binary"
+	"io"
 
 	"go.mongodb.org/mongo-driver/mongo"
 
@@ -65,8 +66,8 @@ func NewControlMessageReader(ctx context.Context, c *mongo.Cursor) *ControlMessa
 	n, e := gzipReader.Read(reader.output)
 	reader.gzipReader = gzipReader
 	reader.outputLength = n
-	if n == 0 || e != nil {
-		return reader
+	if e != nil && e != io.EOF {
+		return nil
 	}
 
 	return reader
@@ -75,13 +76,16 @@ func NewControlMessageReader(ctx context.Context, c *mongo.Cursor) *ControlMessa
 func (r *ControlMessageReader) Pop() *app.Control {
 	if r.outputLength < 3 { // at least we have to have type: 1 byte, and two bytes of offset
 		n, e := r.gzipReader.Read(r.output[r.outputLength:])
-		if n == 0 || e != nil {
+		if e != nil && e != io.EOF {
 			return nil
 		}
 		r.outputLength += n
 	}
 
-	m := &app.Control{}
+	if r.outputLength < 3 { // at least we have to have type: 1 byte, and two bytes of offset
+		return nil
+	}
+		m := &app.Control{}
 	offset := 0
 	//now here we can start deserializing the control messages
 	//output[:n] contains the uncompressed buffer
@@ -92,6 +96,9 @@ func (r *ControlMessageReader) Pop() *app.Control {
 	controlMessageBuffer := r.output[:r.outputLength]
 	switch controlMessageBuffer[offset] {
 	case app.DelayMessage:
+		if r.outputLength < 5 {
+			return nil
+		}
 		offset++
 		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
 		offset++
@@ -103,6 +110,9 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		m.Offset = recordingOffset
 		m.DelayMs = delayMilliSeconds
 	case app.ResizeMessage:
+		if r.outputLength < 7 {
+			return nil
+		}
 		offset++
 		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
 		offset++
