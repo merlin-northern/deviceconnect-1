@@ -85,8 +85,8 @@ func (r *ControlMessageReader) Pop() *app.Control {
 	if r.outputLength < 3 { // at least we have to have type: 1 byte, and two bytes of offset
 		return nil
 	}
-		m := &app.Control{}
-	offset := 0
+	m := &app.Control{}
+	offset := r.currentOffset
 	//now here we can start deserializing the control messages
 	//output[:n] contains the uncompressed buffer
 	// +---------+----------+---------+
@@ -109,6 +109,7 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		m.Type = app.DelayMessage
 		m.Offset = recordingOffset
 		m.DelayMs = delayMilliSeconds
+		r.currentOffset = offset
 	case app.ResizeMessage:
 		if r.outputLength < 7 {
 			return nil
@@ -123,10 +124,11 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		height := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
 		offset++
 		offset++
-		m.Type = app.DelayMessage
+		m.Type = app.ResizeMessage
 		m.Offset = recordingOffset
 		m.TerminalWidth = width
 		m.TerminalHeight = height
+		r.currentOffset = offset
 	default:
 		return nil
 	}

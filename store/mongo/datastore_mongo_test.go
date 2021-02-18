@@ -620,7 +620,7 @@ func TestPopControlMessage(t *testing.T) {
 		Ctx         context.Context
 		SessionID   string
 		ControlData string
-		Message     *app.Control
+		Messages    []*app.Control
 
 		Error error
 	}{
@@ -637,12 +637,51 @@ func TestPopControlMessage(t *testing.T) {
 			//            0    1   2   3   4
 			//echo -n -e '\x02\x20\x00\x08\x00' | gzip - | base64
 			ControlData: "H4sIAOmlLWAAA2NSYOBgAABLgQnUBQAAAA==",
-			Message: &app.Control{
-				Type:           app.DelayMessage, // offset0 \x02
-				Offset:         32,               // offset 1-2 \x20\x00
-				DelayMs:        8,                // offset 3-4 \x08\x00
-				TerminalWidth:  0,
-				TerminalHeight: 0,
+			Messages: []*app.Control{
+				{
+					Type:           app.DelayMessage, // offset0 \x02
+					Offset:         32,               // offset 1-2 \x20\x00
+					DelayMs:        8,                // offset 3-4 \x08\x00
+					TerminalWidth:  0,
+					TerminalHeight: 0,
+				},
+			},
+		},
+		{
+			Name: "ok more than one",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000000",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4
+			//echo -n -e '\x02\x20\x00\x08\x00\x02\xfa\x3f\x00\x80\x01\x01\x04\x50\x00\x18\x00' | gzip - | base64
+			ControlData: "H4sIAJ2rLmAAA2NSYOBgYPplz9DAyMgSwCDBAAADEJylEQAAAA==",
+			Messages: []*app.Control{
+				{
+					Type:           app.DelayMessage, // offset 0 \x02
+					Offset:         32,               // offset 1-2 \x20\x00
+					DelayMs:        8,                // offset 3-4 \x08\x00
+					TerminalWidth:  0,
+					TerminalHeight: 0,
+				},
+				{
+					Type:           app.DelayMessage, // offset 0 \x02
+					Offset:         16378,            // offset 1-2 \x20\x00
+					DelayMs:        32768,            // offset 3-4 \x08\x00
+					TerminalWidth:  0,
+					TerminalHeight: 0,
+				},
+				{
+					Type:           app.ResizeMessage, // offset 0 \x01
+					Offset:         1025,              // offset 1-2 \x20\x00
+					DelayMs:        0,                 // offset 3-4 \x08\x00
+					TerminalWidth:  80,                // offset 5-6
+					TerminalHeight: 24,                // offset 7-8
+				},
 			},
 		},
 		{
@@ -660,7 +699,7 @@ func TestPopControlMessage(t *testing.T) {
 			ControlData: "H4sIAHurLWAAA1NSYOBgAABPrsgVBQAAAA==",
 		},
 		{
-			Name: "error buffer does not coantin a full message",
+			Name: "error buffer does not contain a full message",
 
 			Ctx: identity.WithContext(
 				context.Background(),
@@ -723,11 +762,16 @@ func TestPopControlMessage(t *testing.T) {
 
 			r := NewControlMessageReader(ctx, c)
 			assert.NotNil(t, r)
-			m := r.Pop()
-			t.Logf("popped message: %+v", m)
-			if tc.Error != nil {
+
+			if len(tc.Messages) == 0 {
+				m := r.Pop()
+				assert.Nil(t, m)
 			} else {
-				assert.Equal(t, tc.Message, m)
+				actualMessages := make([]*app.Control, len(tc.Messages))
+				for i, _ := range tc.Messages {
+					actualMessages[i] = r.Pop()
+				}
+				assert.Equal(t, tc.Messages, actualMessages)
 			}
 		})
 	}
