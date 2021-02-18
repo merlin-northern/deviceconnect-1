@@ -354,6 +354,8 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	dbname := mstore.DbFromContext(ctx, DbName)
 	coll := db.client.Database(dbname).
 		Collection(RecordingsCollectionName)
+	collControl := db.client.Database(dbname).
+		Collection(ControlCollectionName)
 
 	findOptions := mopts.Find()
 	sortField := bson.M{
@@ -370,35 +372,60 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 		return err
 	}
 
-	output := make([]byte, recordingReadBufferSize)
-	var buffer bytes.Buffer
-	for c.Next(ctx) {
-		var r model.Recording
-		err = c.Decode(&r)
-		if err != nil {
-			return err
-		}
-
-		buffer.Reset()
-		buffer.Write(r.Recording)
-		gzipReader, e := gzip.NewReader(&buffer)
-		if e != nil {
-			err = e
-		}
-
-		for {
-			n, e := gzipReader.Read(output)
-			if n == 0 || e != nil {
-				gzipReader.Close()
-				break
-			}
-			_, e = w.Write(output[:n])
-			if e != nil {
-				err = e
-			}
-		}
-		gzipReader.Close()
+	controlCursor, err := collControl.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+		findOptions,
+	)
+	if err != nil {
+		return err
 	}
+
+	controlMsgs:=NewControlMessageReader(ctx, controlCursor)
+	for {
+		control:=controlMsgs.Pop()
+		if control == nil {
+			// send the whole recording, there is no more control data
+			output := make([]byte, recordingReadBufferSize)
+			var buffer bytes.Buffer
+			for c.Next(ctx) {
+				var r model.Recording
+				err = c.Decode(&r)
+				if err != nil {
+					return err
+				}
+
+				buffer.Reset()
+				buffer.Write(r.Recording)
+				gzipReader, e := gzip.NewReader(&buffer)
+				if e != nil {
+					err = e
+				}
+
+				for {
+					n, e := gzipReader.Read(output)
+					if n == 0 || e != nil {
+						gzipReader.Close()
+						break
+					}
+					_, e = w.Write(output[:n])
+					if e != nil {
+						err = e
+					}
+				}
+				gzipReader.Close()
+			}
+			break
+		} else {
+			//0. keep track of a global offset in the whole recording
+			// (across all the buffers in the recordings collection for this session)
+			//1. send until we reach the recording within which the control.Offset lies
+			//2. send up to control.Offset bytes
+			//3. send the control message, get the next control message
+		}
+	}
+
 
 	return err
 }
