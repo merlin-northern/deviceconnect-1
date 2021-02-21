@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"github.com/mendersoftware/deviceconnect/app"
+	"io"
 	"testing"
 	"time"
 
@@ -773,6 +774,96 @@ func TestPopControlMessage(t *testing.T) {
 				}
 				assert.Equal(t, tc.Messages, actualMessages)
 			}
+		})
+	}
+}
+
+func TestReadRecording(t *testing.T) {
+	testCases := []struct {
+		Name string
+
+		Ctx            context.Context
+		SessionID      string
+		RecordingData  []string
+		ReadBufferSize int
+
+		Error error
+	}{
+		{
+			Name: "ok",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000002",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000002",
+			RecordingData: []string{
+				"H4sIAKOjMmAAA1NOTc7IV8jP5gIiAIEuTnMMAAAA",
+				"H4sIAFtvMmAAA1WPwWrDMAyGz8pTCHaeB4PtPlqPlTU7LOwcPFvNTG0r2G6gbz85hNH5IiOk7/90Fwo6WrwlyymRrQ/dnu2Z8skHAsDenKl9EfHbJ2n8GwZsb2IV2SnOfkKMxqexUqlqYmi13ACVsZbmapIlwE/9su+1ig7RBk9JaG6dvLccZy6krjGs9HKJkiQZFAAu1YfSHQ87/TFoECMz+9VDnE5+WiEF/sxkdzMrlBfKsFBynBtgfD0c9TDu3t6Hr16VH/P49IyCm29w6mo2CYnfqO3Edp0gK2fqfgGMUrrGRAEAAA==",
+			},
+			ReadBufferSize: 4,
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.Name, func(t *testing.T) {
+			ds := &DataStoreMongo{client: db.Client()}
+			defer ds.DropDatabase()
+
+			database := db.Client().Database(mstore.DbNameForTenant(
+				"000000000000000000000000", DbName,
+			))
+			collSess := database.Collection(RecordingsCollectionName)
+
+			for i, _ := range tc.RecordingData {
+				d, err := base64.StdEncoding.DecodeString(tc.RecordingData[i])
+				assert.NoError(t, err)
+
+				_, err = collSess.InsertOne(nil, &model.Recording{
+					ID:        uuid.New(),
+					SessionID: tc.SessionID,
+					Recording: d,
+					CreatedTs: time.Now().UTC(),
+					ExpireTs:  time.Now().UTC(),
+				})
+				assert.NoError(t, err)
+			}
+			findOptions := mopts.Find()
+			sortField := bson.M{
+				"created_ts": 1,
+			}
+			findOptions.SetSort(sortField)
+			c, err := collSess.Find(nil,
+				bson.M{
+					dbFieldSessionID: tc.SessionID,
+				},
+				findOptions,
+			)
+			assert.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Second*10)
+			defer cancel()
+			reader := NewRecordingReader(ctx, c)
+			assert.NotNil(t, reader)
+			buffer := make([]byte, tc.ReadBufferSize)
+			s:=""
+			for err != io.EOF {
+				assert.NoError(t, err)
+				err = reader.Read(buffer)
+				if err==io.EOF {
+					break
+				}
+				if err==ErrNoData {
+					err=nil
+					continue
+				}
+				s+=string(buffer)
+				t.Logf("read: %s/%d", string(buffer), len(buffer))
+			}
+			t.Logf("read(final): %s/%d", s, len(buffer))
 		})
 	}
 }

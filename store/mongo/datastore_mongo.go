@@ -15,8 +15,6 @@
 package mongo
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -341,137 +339,198 @@ func (db *DataStoreMongo) GetSession(
 	return session, nil
 }
 
+//func writeMessage() {
+//	rand.Seed(time.Now().UTC().UnixNano())
+//	if rand.New(rand.NewSource(time.Now().UTC().UnixNano())).Float32() > 0.8 {
+//		msg := ws.ProtoMsg{
+//			Header: ws.ProtoHdr{
+//				Proto:     ws.ProtoTypeShell,
+//				MsgType:   "delay",
+//				SessionID: r.sessionID,
+//				Properties: map[string]interface{}{
+//					"delay_value": 1500,
+//				},
+//			},
+//			Body: nil,
+//		}
+//
+//		m := nats.Msg{
+//			Subject: "playback",
+//			Reply:   "no-reply",
+//			Data:    nil,
+//			Sub:     nil,
+//		}
+//
+//		msg.Body = d
+//		data, _ := msgpack.Marshal(msg)
+//		m.Data = data
+//		r.deviceChan <- &m
+//	}
+//	msg := ws.ProtoMsg{
+//		Header: ws.ProtoHdr{
+//			Proto:     ws.ProtoTypeShell,
+//			MsgType:   shell.MessageTypeShellCommand,
+//			SessionID: r.sessionID,
+//			Properties: map[string]interface{}{
+//				"status": shell.NormalMessage,
+//			},
+//		},
+//		Body: nil,
+//	}
+//
+//	m := nats.Msg{
+//		Subject: "playback",
+//		Reply:   "no-reply",
+//		Data:    nil,
+//		Sub:     nil,
+//	}
+//
+//	msg.Body = d
+//	data, _ := msgpack.Marshal(msg)
+//	m.Data = data
+//	time.Sleep(time.Duration(r.sleepMilliseconds) * time.Millisecond)
+//	r.deviceChan <- &m
+//	return len(d), nil
+//}
+
 // GetSession writes session recordings to given io.Writer
 func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	sessionID string,
 	w io.Writer) error {
-	/*
-		1. Find all ControlRecordings, Find all Recordings
-		2. traverse ControlRecordings, for each: get offset if it is within currentRecording buffer
-		   send up to offset bytes, send control message, continue to next control recording
-		3. send the rest of the currentRecording
-	*/
-	dbname := mstore.DbFromContext(ctx, DbName)
-	coll := db.client.Database(dbname).
-		Collection(RecordingsCollectionName)
-	collControl := db.client.Database(dbname).
-		Collection(ControlCollectionName)
-
-	findOptions := mopts.Find()
-	sortField := bson.M{
-		"created_ts": 1,
-	}
-	findOptions.SetSort(sortField)
-	c, err := coll.Find(ctx,
-		bson.M{
-			dbFieldSessionID: sessionID,
-		},
-		findOptions,
-	)
-	if err != nil {
-		return err
-	}
-
-	controlCursor, err := collControl.Find(ctx,
-		bson.M{
-			dbFieldSessionID: sessionID,
-		},
-		findOptions,
-	)
-	if err != nil {
-		return err
-	}
-
-	recordingBytesSent := 0
-	controlMsgs := NewControlMessageReader(ctx, controlCursor)
-	for {
-		control := controlMsgs.Pop()
-		if control == nil {
-			// send the whole recording, there is no more control data
-			output := make([]byte, recordingReadBufferSize)
-			var buffer bytes.Buffer
-			for c.Next(ctx) {
-				var r model.Recording
-				err = c.Decode(&r)
-				if err != nil {
-					return err
-				}
-
-				buffer.Reset()
-				buffer.Write(r.Recording)
-				gzipReader, e := gzip.NewReader(&buffer)
-				if e != nil {
-					err = e
-				}
-
-				for {
-					n, e := gzipReader.Read(output)
-					if n == 0 || e != nil {
-						gzipReader.Close()
-						break
-					}
-					_, e = w.Write(output[:n])
-					if e != nil {
-						err = e
-					}
-				}
-				gzipReader.Close()
-			}
-			break
-		} else {
-			//0. keep track of a global offset in the whole recording
-			// (across all the buffers in the recordings collection for this session)
-			//1. send until we reach the recording within which the control.Offset lies
-			//2. send up to control.Offset bytes
-			//3. send the control message, get the next control message
-			output := make([]byte, recordingReadBufferSize)
-			var buffer bytes.Buffer
-			for c.Next(ctx) {
-				var r model.Recording
-				err = c.Decode(&r)
-				if err != nil {
-					return err
-				}
-
-				buffer.Reset()
-				buffer.Write(r.Recording)
-				gzipReader, e := gzip.NewReader(&buffer)
-				if e != nil {
-					err = e
-				}
-
-				for {
-					n, e := gzipReader.Read(output)
-					if n == 0 || e != nil {
-						gzipReader.Close()
-						break
-					}
-					// read n bytes output[:n]
-					if recordingBytesSent > int(control.Offset) {
-						//this is very strange -- seems we missed this control message
-						break
-					}
-					bytesToSend := int(control.Offset) - recordingBytesSent
-					if bytesToSend < n {
-						_, e = w.Write(output[:bytesToSend])
-						if e != nil {
-							err = e
-						}
-						recordingBytesSent += bytesToSend
-					} else {
-						_, e = w.Write(output[:n])
-						if e != nil {
-							err = e
-						}
-						recordingBytesSent += n
-					}
-				}
-				gzipReader.Close()
-			}
-		}
-	}
-
-	return err
+	return nil
+	///*
+	//	1. Find all ControlRecordings, Find all Recordings
+	//	2. traverse ControlRecordings, for each: get offset if it is within currentRecording buffer
+	//	   send up to offset bytes, send control message, continue to next control recording
+	//	3. send the rest of the currentRecording
+	//*/
+	//dbname := mstore.DbFromContext(ctx, DbName)
+	//coll := db.client.Database(dbname).
+	//	Collection(RecordingsCollectionName)
+	//collControl := db.client.Database(dbname).
+	//	Collection(ControlCollectionName)
+	//
+	//findOptions := mopts.Find()
+	//sortField := bson.M{
+	//	"created_ts": 1,
+	//}
+	//findOptions.SetSort(sortField)
+	//c, err := coll.Find(ctx,
+	//	bson.M{
+	//		dbFieldSessionID: sessionID,
+	//	},
+	//	findOptions,
+	//)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//controlCursor, err := collControl.Find(ctx,
+	//	bson.M{
+	//		dbFieldSessionID: sessionID,
+	//	},
+	//	findOptions,
+	//)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//recordingBytesSent := 0
+	//controlMsgs := NewControlMessageReader(ctx, controlCursor)
+	//for {
+	//	control := controlMsgs.Pop()
+	//	if control == nil {
+	//		// send the whole recording, there is no more control data
+	//		output := make([]byte, recordingReadBufferSize)
+	//		var buffer bytes.Buffer
+	//		for c.Next(ctx) {
+	//			var r model.Recording
+	//			err = c.Decode(&r)
+	//			if err != nil {
+	//				return err
+	//			}
+	//
+	//			buffer.Reset()
+	//			buffer.Write(r.Recording)
+	//			gzipReader, e := gzip.NewReader(&buffer)
+	//			if e != nil {
+	//				err = e
+	//			}
+	//
+	//			for {
+	//				n, e := gzipReader.Read(output)
+	//				if n == 0 || e != nil {
+	//					gzipReader.Close()
+	//					break
+	//				}
+	//				_, e = w.Write(output[:n])
+	//				if e != nil {
+	//					err = e
+	//				}
+	//			}
+	//			gzipReader.Close()
+	//		}
+	//		break
+	//	} else {
+	//		//0. keep track of a global offset in the whole recording
+	//		// (across all the buffers in the recordings collection for this session)
+	//		//1. send until we reach the recording within which the control.Offset lies
+	//		//2. send up to control.Offset bytes
+	//		//3. send the control message, get the next control message
+	//		output := make([]byte, recordingReadBufferSize)
+	//		var buffer bytes.Buffer
+	//		for c.Next(ctx) {
+	//			var r model.Recording
+	//			err = c.Decode(&r)
+	//			if err != nil {
+	//				return err
+	//			}
+	//
+	//			buffer.Reset()
+	//			buffer.Write(r.Recording)
+	//			gzipReader, e := gzip.NewReader(&buffer)
+	//			if e != nil {
+	//				err = e
+	//			}
+	//
+	//			for {
+	//				n, e := gzipReader.Read(output)
+	//				if n == 0 || e != nil {
+	//					gzipReader.Close()
+	//					break
+	//				}
+	//				// read n bytes output[:n]
+	//				if recordingBytesSent > int(control.Offset) {
+	//					//this is very strange -- seems we missed this control message
+	//					break
+	//				}
+	//				bytesToSend := int(control.Offset) - recordingBytesSent
+	//				if bytesToSend < n {
+	//					sendStdout(output[:bytesToSend])
+	//					_, e = w.Write(output[:bytesToSend])
+	//					if e != nil {
+	//						err = e
+	//					}
+	//					recordingBytesSent += bytesToSend
+	//					sendControl(control)
+	//					//after this we need to get the next control message, but what to do
+	//					//with the remainder o the bytes in output buffer, and also the rest of the r?
+	//					//we need reader wrapper for the recordings?
+	//				} else {
+	//					_, e = w.Write(output[:n])
+	//					if e != nil {
+	//						err = e
+	//					}
+	//					recordingBytesSent += n
+	//					sendStdout(output[:n])
+	//				}
+	//			}
+	//			gzipReader.Close()
+	//		}
+	//	}
+	//}
+	//
+	//return err
 }
 
 // SetSession saves a session recording
