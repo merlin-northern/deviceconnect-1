@@ -18,16 +18,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"errors"
 	"io"
 
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/mendersoftware/deviceconnect/model"
-)
-
-var (
-	ErrNoData = errors.New("no data read")
 )
 
 type RecordingReader struct {
@@ -50,7 +45,8 @@ func NewRecordingReader(ctx context.Context, c *mongo.Cursor) *RecordingReader {
 	return r
 }
 
-func (rr *RecordingReader) Read(buffer []byte) error {
+func (rr *RecordingReader) Read(buffer []byte) (int,error) {
+	bytesRead:=0
 	bufferLength := len(buffer)
 	if len(rr.output) < 1 {
 		// the buffer is empty, either we are at the beginning or all of the buffer was sent
@@ -61,41 +57,44 @@ func (rr *RecordingReader) Read(buffer []byte) error {
 			n, e := rr.gzipReader.Read(rr.output)
 
 			if e != nil && e != io.EOF {
-				rr.output=[]byte{}
+				rr.output = []byte{}
 				rr.gzipReader.Close()
 				rr.gzipReader = nil
-				return e
+				return 0,e
 			}
 
 			if n == 0 || e == io.EOF {
-				rr.output=[]byte{}
+				rr.output = []byte{}
 				rr.gzipReader.Close()
 				rr.gzipReader = nil
-				//this is EOF from the gzip stream, which means we decompressed it all
-				return ErrNoData
+				//this is EOF from the gzip stream, which means we decompressed it all, but there maybe
+				//another record, we need to check with next to cursor.
+				return rr.Read(buffer)
 			}
 
 			if bufferLength > n {
 				copy(buffer, rr.output[:n])
 				rr.output = []byte{}
+				bytesRead=n
 			} else {
 				copy(buffer, rr.output[:bufferLength])
 				rr.output = rr.output[bufferLength:n]
+				bytesRead=bufferLength
 			}
 
-			return nil
+			return bytesRead,nil
 		}
 
 		hasNext := rr.c.Next(rr.ctx)
 		if !hasNext {
 			//this means that there are no records to read, in here we definitely read all there was
-			return io.EOF
+			return 0,io.EOF
 		}
 
 		var r model.Recording
 		err := rr.c.Decode(&r)
 		if err != nil {
-			return err
+			return 0,err
 		}
 
 		rr.buffer.Reset()
@@ -103,43 +102,47 @@ func (rr *RecordingReader) Read(buffer []byte) error {
 
 		gzipReader, err := gzip.NewReader(&rr.buffer)
 		if err != nil {
-			return err
+			return 0,err
 		}
 
 		rr.output = make([]byte, recordingReadBufferSize)
 		n, e = gzipReader.Read(rr.output)
 
 		if e != nil && e != io.EOF {
-			rr.output=[]byte{}
+			rr.output = []byte{}
 			rr.gzipReader = nil
 			gzipReader.Close()
-			return e
+			return 0,e
 		}
 
 		if n == 0 {
-			rr.output=[]byte{}
+			rr.output = []byte{}
 			rr.gzipReader = nil
 			gzipReader.Close()
-			return io.EOF
+			return 0,io.EOF
 		}
 
 		rr.gzipReader = gzipReader
 		if bufferLength > n {
 			copy(buffer, rr.output[:n])
 			rr.output = []byte{}
+			bytesRead=n
 		} else {
 			copy(buffer, rr.output[:bufferLength])
 			rr.output = rr.output[bufferLength:n]
+			bytesRead=bufferLength
 		}
 	} else {
 		if bufferLength > len(rr.output) {
 			copy(buffer, rr.output)
 			rr.output = []byte{}
+			bytesRead=len(rr.output)
 		} else {
 			copy(buffer, rr.output[:bufferLength])
 			rr.output = rr.output[bufferLength:]
+			bytesRead=bufferLength
 		}
 	}
 
-	return nil
+	return bytesRead,nil
 }

@@ -786,6 +786,7 @@ func TestReadRecording(t *testing.T) {
 		SessionID      string
 		RecordingData  []string
 		ReadBufferSize int
+		ExpectedString string
 
 		Error error
 	}{
@@ -803,7 +804,25 @@ func TestReadRecording(t *testing.T) {
 				"H4sIAKOjMmAAA1NOTc7IV8jP5gIiAIEuTnMMAAAA",
 				"H4sIAFtvMmAAA1WPwWrDMAyGz8pTCHaeB4PtPlqPlTU7LOwcPFvNTG0r2G6gbz85hNH5IiOk7/90Fwo6WrwlyymRrQ/dnu2Z8skHAsDenKl9EfHbJ2n8GwZsb2IV2SnOfkKMxqexUqlqYmi13ACVsZbmapIlwE/9su+1ig7RBk9JaG6dvLccZy6krjGs9HKJkiQZFAAu1YfSHQ87/TFoECMz+9VDnE5+WiEF/sxkdzMrlBfKsFBynBtgfD0c9TDu3t6Hr16VH/P49IyCm29w6mo2CYnfqO3Edp0gK2fqfgGMUrrGRAEAAA==",
 			},
+			ReadBufferSize: 512,
+			ExpectedString: "#echo ok\nok\n#ls deviceconnect/\nDockerfile\t\t Makefile   bin\t\t deviceconnect\t     go.mod.orig  main_test.go\ttests\nDockerfile.acceptance\t README.md  client\t docker-compose.yml  go.sum\t  model\t\tutils\nLICENSE\t\t\t api\t    config\t docs\t\t     go.sum.orig  server\tvendor\nLIC_FILES_CHKSUM.sha256  app\t    config.yaml  go.mod\t\t     main.go\t  store\n",
+		},
+		{
+			Name: "ok short buffer",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000002",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000002",
+			RecordingData: []string{
+				"H4sIAKOjMmAAA1NOTc7IV8jP5gIiAIEuTnMMAAAA",
+				"H4sIAFtvMmAAA1WPwWrDMAyGz8pTCHaeB4PtPlqPlTU7LOwcPFvNTG0r2G6gbz85hNH5IiOk7/90Fwo6WrwlyymRrQ/dnu2Z8skHAsDenKl9EfHbJ2n8GwZsb2IV2SnOfkKMxqexUqlqYmi13ACVsZbmapIlwE/9su+1ig7RBk9JaG6dvLccZy6krjGs9HKJkiQZFAAu1YfSHQ87/TFoECMz+9VDnE5+WiEF/sxkdzMrlBfKsFBynBtgfD0c9TDu3t6Hr16VH/P49IyCm29w6mo2CYnfqO3Edp0gK2fqfgGMUrrGRAEAAA==",
+			},
 			ReadBufferSize: 4,
+			ExpectedString: "#echo ok\nok\n#ls deviceconnect/\nDockerfile\t\t Makefile   bin\t\t deviceconnect\t     go.mod.orig  main_test.go\ttests\nDockerfile.acceptance\t README.md  client\t docker-compose.yml  go.sum\t  model\t\tutils\nLICENSE\t\t\t api\t    config\t docs\t\t     go.sum.orig  server\tvendor\nLIC_FILES_CHKSUM.sha256  app\t    config.yaml  go.mod\t\t     main.go\t  store\n",
 		},
 	}
 
@@ -849,21 +868,18 @@ func TestReadRecording(t *testing.T) {
 			reader := NewRecordingReader(ctx, c)
 			assert.NotNil(t, reader)
 			buffer := make([]byte, tc.ReadBufferSize)
-			s:=""
+			s := ""
 			for err != io.EOF {
 				assert.NoError(t, err)
-				err = reader.Read(buffer)
-				if err==io.EOF {
+				n,err := reader.Read(buffer[:])
+				if err == io.EOF {
 					break
 				}
-				if err==ErrNoData {
-					err=nil
-					continue
-				}
-				s+=string(buffer)
-				t.Logf("read: %s/%d", string(buffer), len(buffer))
+				s += string(buffer[:n])
+				t.Logf("read: %s/%d", string(buffer[:n]), n)
 			}
-			t.Logf("read(final): %s/%d", s, len(buffer))
+			t.Logf("read(final): %s/%d", s, len(s))
+			assert.Equal(t, tc.ExpectedString, s)
 		})
 	}
 }
