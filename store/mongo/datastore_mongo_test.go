@@ -813,10 +813,10 @@ func TestReadRecording(t *testing.T) {
 			Ctx: identity.WithContext(
 				context.Background(),
 				&identity.Identity{
-					Tenant: "000000000000000000000002",
+					Tenant: "000000000000000000000004",
 				},
 			),
-			SessionID: "00000000-0000-0000-0000-000000000002",
+			SessionID: "00000000-0000-0000-0000-000000000004",
 			RecordingData: []string{
 				"H4sIAKOjMmAAA1NOTc7IV8jP5gIiAIEuTnMMAAAA",
 				"H4sIAFtvMmAAA1WPwWrDMAyGz8pTCHaeB4PtPlqPlTU7LOwcPFvNTG0r2G6gbz85hNH5IiOk7/90Fwo6WrwlyymRrQ/dnu2Z8skHAsDenKl9EfHbJ2n8GwZsb2IV2SnOfkKMxqexUqlqYmi13ACVsZbmapIlwE/9su+1ig7RBk9JaG6dvLccZy6krjGs9HKJkiQZFAAu1YfSHQ87/TFoECMz+9VDnE5+WiEF/sxkdzMrlBfKsFBynBtgfD0c9TDu3t6Hr16VH/P49IyCm29w6mo2CYnfqO3Edp0gK2fqfgGMUrrGRAEAAA==",
