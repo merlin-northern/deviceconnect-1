@@ -36,6 +36,7 @@ type DataStore interface {
 	GetSession(ctx context.Context, sessionID string) (*model.Session, error)
 	GetSessionRecording(ctx context.Context, sessionID string, w io.Writer) error
 	InsertSessionRecording(ctx context.Context, sessionID string, sessionBytes []byte) error
+	InsertControlRecording(ctx context.Context, sessionID string, sessionBytes []byte) error
 	DeleteSession(ctx context.Context, sessionID string) (*model.Session, error)
 	Close() error
 }

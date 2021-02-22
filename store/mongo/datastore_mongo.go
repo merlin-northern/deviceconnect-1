@@ -679,6 +679,28 @@ func (db *DataStoreMongo) InsertSessionRecording(ctx context.Context,
 	return err
 }
 
+// Inserts control data recording
+func (db *DataStoreMongo) InsertControlRecording(ctx context.Context,
+	sessionID string,
+	sessionBytes []byte) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	coll := db.client.Database(dbname).
+		Collection(ControlCollectionName)
+
+	now := clock.Now().UTC()
+	recording := model.ControlData{
+		ID:        uuid.New(),
+		SessionID: sessionID,
+		Control:   sessionBytes,
+		CreatedTs: now,
+		ExpireTs:  now.Add(db.recordingExpire),
+	}
+	_, err := coll.InsertOne(ctx,
+		&recording,
+	)
+	return err
+}
+
 // Close disconnects the client
 func (db *DataStoreMongo) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

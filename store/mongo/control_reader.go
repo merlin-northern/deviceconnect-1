@@ -81,7 +81,7 @@ func (r *ControlMessageReader) Pop() *app.Control {
 	if r.c == nil {
 		return nil
 	}
-	
+
 	if r.outputLength < 3 { // at least we have to have type: 1 byte, and two bytes of offset
 		n, e := r.gzipReader.Read(r.output[r.outputLength:])
 		if e != nil && e != io.EOF {

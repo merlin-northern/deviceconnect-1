@@ -50,7 +50,7 @@ type App interface {
 	GetSessionRecording(ctx context.Context, id string, w io.Writer) (err error)
 	SaveSessionRecording(ctx context.Context, id string, sessionBytes []byte) error
 	GetRecorder(ctx context.Context, sessionID string) *Recorder
-	GetControlRecorder(ctx context.Context, sessionID string) *Recorder
+	GetControlRecorder(ctx context.Context, sessionID string) *ControlRecorder
 }
 
 // app is an app object
@@ -269,6 +269,6 @@ func (a app) GetRecorder(ctx context.Context, sessionID string) *Recorder {
 	return NewRecorder(ctx, sessionID, a.store)
 }
 
-func (a app) GetControlRecorder(ctx context.Context, sessionID string) *Recorder {
-	return nil
+func (a app) GetControlRecorder(ctx context.Context, sessionID string) *ControlRecorder {
+	return NewControlRecorder(ctx, sessionID, a.store)
 }

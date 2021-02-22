@@ -364,7 +364,7 @@ func (h ManagementController) websocketWriter(
 	controlRecorderBuffered := bufio.NewWriterSize(controlRecorder, app.RecorderBufferSize)
 	defer controlRecorderBuffered.Flush()
 	recordedBytes := 0
-	controlRecordedBytes := 0
+	//controlRecordedBytes := 0
 Loop:
 	for {
 		select {
@@ -374,6 +374,7 @@ Loop:
 			if err != nil {
 				return err
 			}
+			l.Infof("(1) got message: %+v", mr)
 			if mr.Header.Proto == ws.ProtoTypeShell {
 				switch mr.Header.MsgType {
 				case shell.MessageTypeShellCommand:
@@ -394,15 +395,15 @@ Loop:
 						" at %d on stop shell", recordedBytes)
 					recorderBuffered.Flush()
 					controlRecorderBuffered.Flush()
-				case shell.MessageTypeResizeShell:
-					controlRecordedBytes += 4 * len(mr.Header.Properties)
-					if controlRecordedBytes >= app.MessageSizeLimit {
-						l.Infof("closing session on control data limit reached.")
-						//see https://tracker.mender.io/browse/MEN-4448
-						break Loop
-					}
-					controlMsg := app.Control{Type: app.ResizeMessage}
-					controlRecorderBuffered.Write(controlMsg.GetBytes())
+					//case shell.MessageTypeResizeShell:
+					//	controlRecordedBytes += 4 * len(mr.Header.Properties)
+					//	if controlRecordedBytes >= app.MessageSizeLimit {
+					//		l.Infof("closing session on control data limit reached.")
+					//		//see https://tracker.mender.io/browse/MEN-4448
+					//		break Loop
+					//	}
+					//	controlMsg := app.Control{Type: app.ResizeMessage}
+					//	controlRecorderBuffered.Write(controlMsg.GetBytes())
 				}
 			}
 
@@ -475,9 +476,12 @@ func (h ManagementController) ConnectServeWS(
 		close(errChan)
 	}()
 
+	controlRecorder := h.app.GetControlRecorder(ctx, sess.ID)
+	controlRecorderBuffered := bufio.NewWriterSize(controlRecorder, app.RecorderBufferSize)
+	defer controlRecorderBuffered.Flush()
 	// websocketWriter is responsible for closing the websocket
 	//nolint:errcheck
-	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, h.app.GetRecorder(ctx, sess.ID), h.app.GetControlRecorder(ctx, sess.ID))
+	go h.websocketWriter(ctx, conn, sess, deviceChan, errChan, h.app.GetRecorder(ctx, sess.ID), controlRecorder)
 
 	var data []byte
 	for {
@@ -494,6 +498,8 @@ func (h ManagementController) ConnectServeWS(
 			return err
 		}
 
+		l.Infof("(2) got message: %+v", m)
+
 		m.Header.SessionID = sess.ID
 		if m.Header.Properties == nil {
 			m.Header.Properties = make(map[string]interface{})
@@ -508,6 +514,35 @@ func (h ManagementController) ConnectServeWS(
 				remoteTerminalRunning = true
 			case shell.MessageTypeStopShell:
 				remoteTerminalRunning = false
+			case shell.MessageTypeResizeShell:
+				//controlRecordedBytes += 4 * len(mr.Header.Properties)
+				//if controlRecordedBytes >= app.MessageSizeLimit {
+				//	l.Infof("closing session on control data limit reached.")
+				//	//see https://tracker.mender.io/browse/MEN-4448
+				//	break Loop
+				//}
+				var height uint16=0
+				switch m.Header.Properties["terminal_height"].(type) {
+				case uint8:
+					height=uint16(m.Header.Properties["terminal_height"].(uint8))
+				case int8:
+					height=uint16(m.Header.Properties["terminal_height"].(int8))
+				}
+				var width uint16=0
+				switch m.Header.Properties["terminal_width"].(type) {
+				case uint8:
+					width=uint16(m.Header.Properties["terminal_width"].(uint8))
+				case int8:
+					width=uint16(m.Header.Properties["terminal_width"].(int8))
+				}
+				controlMsg := app.Control{
+					Type:           app.ResizeMessage,
+					Offset:         0,
+					DelayMs:        0,
+					TerminalHeight:  height,
+					TerminalWidth:  width,
+				}
+				controlRecorderBuffered.Write(controlMsg.GetBytes())
 			}
 		}
 
