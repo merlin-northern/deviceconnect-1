@@ -18,6 +18,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/mendersoftware/deviceconnect/app"
+	"github.com/mendersoftware/go-lib-micro/ws"
+	"github.com/mendersoftware/go-lib-micro/ws/shell"
+	"github.com/vmihailenco/msgpack/v5"
 	"io"
 	"strings"
 	"time"
@@ -41,8 +45,9 @@ import (
 )
 
 var (
-	clock                   utils.Clock = utils.RealClock{}
-	recordingReadBufferSize             = 1024
+	clock                        utils.Clock = utils.RealClock{}
+	recordingReadBufferSize                  = 1024
+	ErrUnknownControlMessageType             = errors.New("unknown control message type")
 )
 
 const (
@@ -393,10 +398,129 @@ func (db *DataStoreMongo) GetSession(
 //	return len(d), nil
 //}
 
+func sendControlMessage(control app.Control, sessionID string, w io.Writer) (int, error) {
+	messageType := ""
+	var data []byte
+	properties := make(map[string]interface{})
+
+	switch control.Type {
+	case app.DelayMessage:
+		messageType = "delay"
+		properties["delay_value"] = control.DelayMs
+	case app.ResizeMessage:
+		messageType = shell.MessageTypeResizeShell
+		properties["terminal_height"] = control.TerminalHeight
+		properties["terminal_width"] = control.TerminalWidth
+	default:
+		return 0, ErrUnknownControlMessageType
+	}
+
+	msg := ws.ProtoMsg{
+		Header: ws.ProtoHdr{
+			Proto:      ws.ProtoTypeShell,
+			MsgType:    messageType,
+			SessionID:  sessionID,
+			Properties: properties,
+		},
+		Body: data,
+	}
+	messagePacked, err := msgpack.Marshal(&msg)
+	if err != nil {
+		return 0, err
+	} else {
+		return w.Write(messagePacked)
+	}
+}
+
+func sendRecordingMessage(data []byte, sessionID string, w io.Writer) (int, error) {
+	msg := ws.ProtoMsg{
+		Header: ws.ProtoHdr{
+			Proto:      ws.ProtoTypeShell,
+			MsgType:    shell.MessageTypeShellCommand,
+			SessionID:  sessionID,
+			Properties: nil,
+		},
+		Body: data,
+	}
+	messagePacked, err := msgpack.Marshal(&msg)
+	if err != nil {
+		return 0, err
+	} else {
+		return w.Write(messagePacked)
+	}
+}
+
 // GetSession writes session recordings to given io.Writer
 func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	sessionID string,
 	w io.Writer) error {
+	dbname := mstore.DbFromContext(ctx, DbName)
+	collRecording := db.client.Database(dbname).
+		Collection(RecordingsCollectionName)
+	collControl := db.client.Database(dbname).
+		Collection(ControlCollectionName)
+
+	findOptions := mopts.Find()
+	sortField := bson.M{
+		"created_ts": 1,
+	}
+	findOptions.SetSort(sortField)
+	recordingsCursor, err := collRecording.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+		findOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	controlCursor, err := collControl.Find(ctx,
+		bson.M{
+			dbFieldSessionID: sessionID,
+		},
+		findOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	controlReader := NewControlMessageReader(ctx, controlCursor)
+	recordingReader := NewRecordingReader(ctx, recordingsCursor)
+
+	recordingBuffer := make([]byte, recordingReadBufferSize)
+	recordingBytesSent := 0
+	for {
+		control := controlReader.Pop()
+		if control == nil {
+			//no more control messages, we send the whole recording
+			var err error = nil
+			var n int
+			for err != io.EOF {
+				n, err = recordingReader.Read(recordingBuffer)
+				if n > 0 {
+					sendRecordingMessage(recordingBuffer[:n], sessionID, w)
+				}
+			}
+			break
+		} else {
+			if recordingBytesSent > control.Offset {
+				//this should never happen, we missed the control message, no idea what to do
+			}
+
+			//this means that the control offset is in the future part of the recording buffer
+			//we can send up to control.Offset-recordingBytesSent bytes and then send the control message
+			n, _ := recordingReader.Read(recordingBuffer[:(control.Offset - recordingBytesSent)])
+			if n > 0 {
+				//lets just ignore the error, in so many places in theory it may go wrong,
+				//and we do not know what to do in most of them otherwise than pretend it passed
+				sendRecordingMessage(recordingBuffer[:n], sessionID, w)
+				recordingBytesSent += n
+			}
+			sendControlMessage(*control, sessionID, w)
+		}
+	}
+
 	return nil
 	///*
 	//	1. Find all ControlRecordings, Find all Recordings

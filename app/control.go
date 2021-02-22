@@ -21,7 +21,7 @@ const (
 
 type Control struct {
 	Type           byte
-	Offset         uint16
+	Offset         int
 	DelayMs        uint16
 	TerminalWidth  uint16
 	TerminalHeight uint16

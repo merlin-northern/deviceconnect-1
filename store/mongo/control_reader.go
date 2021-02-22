@@ -31,6 +31,10 @@ const (
 	controlReadBufferSize = 4096
 )
 
+var (
+	noopReader = &ControlMessageReader{}
+)
+
 type ControlMessageReader struct {
 	currentOffset uint64
 	output        []byte
@@ -53,7 +57,7 @@ func NewControlMessageReader(ctx context.Context, c *mongo.Cursor) *ControlMessa
 	var r model.ControlData
 	err := c.Decode(&r)
 	if err != nil {
-		return nil
+		return noopReader
 	}
 
 	reader.buffer.Reset()
@@ -67,13 +71,17 @@ func NewControlMessageReader(ctx context.Context, c *mongo.Cursor) *ControlMessa
 	reader.gzipReader = gzipReader
 	reader.outputLength = n
 	if e != nil && e != io.EOF {
-		return nil
+		return noopReader
 	}
 
 	return reader
 }
 
 func (r *ControlMessageReader) Pop() *app.Control {
+	if r.c == nil {
+		return nil
+	}
+	
 	if r.outputLength < 3 { // at least we have to have type: 1 byte, and two bytes of offset
 		n, e := r.gzipReader.Read(r.output[r.outputLength:])
 		if e != nil && e != io.EOF {
@@ -100,14 +108,14 @@ func (r *ControlMessageReader) Pop() *app.Control {
 			return nil
 		}
 		offset++
-		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
+		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:]) //FIXME: offset has to be in, this io too short
 		offset++
 		offset++
 		delayMilliSeconds := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
 		offset++
 		offset++
 		m.Type = app.DelayMessage
-		m.Offset = recordingOffset
+		m.Offset = int(recordingOffset)
 		m.DelayMs = delayMilliSeconds
 		r.currentOffset = offset
 	case app.ResizeMessage:
@@ -125,7 +133,7 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		offset++
 		offset++
 		m.Type = app.ResizeMessage
-		m.Offset = recordingOffset
+		m.Offset = int(recordingOffset)
 		m.TerminalWidth = width
 		m.TerminalHeight = height
 		r.currentOffset = offset

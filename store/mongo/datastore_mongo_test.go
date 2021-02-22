@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"github.com/mendersoftware/go-lib-micro/ws"
+	"github.com/mendersoftware/go-lib-micro/ws/shell"
 	"github.com/vmihailenco/msgpack/v5"
 	"testing"
 	"time"
@@ -501,7 +502,7 @@ func TestGetSessionRecording(t *testing.T) {
 				select {
 				case recording := <-sessionWriter.c:
 					var msg ws.ProtoMsg
-					e:=msgpack.Unmarshal(recording,&msg)
+					e := msgpack.Unmarshal(recording, &msg)
 					assert.NoError(t, e)
 					//now, the GetSessionRecording writes do the io.Writer passed in 3rd arg
 					//the ws.ProtoMsg structs, which represent a stream of bytes as well as
@@ -517,7 +518,9 @@ func TestGetSessionRecording(t *testing.T) {
 					n, e := gzipReader.Read(output)
 					assert.NoError(t, e)
 					gzipReader.Close()
-					assert.Equal(t, recording, output[:n])
+					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == shell.MessageTypeShellCommand {
+						assert.Equal(t, msg.Body, output[:n])
+					}
 				case <-time.After(time.Second):
 					t.Fatal("cannot read the recording data.")
 					t.Fail()
