@@ -19,6 +19,8 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"github.com/mendersoftware/go-lib-micro/ws"
+	"github.com/vmihailenco/msgpack/v5"
 	"testing"
 	"time"
 
@@ -498,9 +500,15 @@ func TestGetSessionRecording(t *testing.T) {
 				assert.NoError(t, err)
 				select {
 				case recording := <-sessionWriter.c:
+					var msg ws.ProtoMsg
+					e:=msgpack.Unmarshal(recording,&msg)
+					assert.NoError(t, e)
+					//now, the GetSessionRecording writes do the io.Writer passed in 3rd arg
+					//the ws.ProtoMsg structs, which represent a stream of bytes as well as
+					//control messages in order of playback.
 					var buffer bytes.Buffer
 
-					_, e := buffer.Write(d)
+					_, e = buffer.Write(d)
 					assert.NoError(t, e)
 					gzipReader, e := gzip.NewReader(&buffer)
 					assert.NoError(t, e)
