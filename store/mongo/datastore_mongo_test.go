@@ -498,7 +498,7 @@ func TestGetSessionRecording(t *testing.T) {
 			rec, err := base64.StdEncoding.DecodeString(tc.RecordingData)
 			assert.NoError(t, err)
 
-			if len(tc.ControlData)>0 {
+			if len(tc.ControlData) > 0 {
 				ctrl, err := base64.StdEncoding.DecodeString(tc.ControlData)
 				assert.NoError(t, err)
 				_, err = collControl.InsertOne(nil, &model.ControlData{
@@ -524,23 +524,40 @@ func TestGetSessionRecording(t *testing.T) {
 			sessionWriter := &sessionWriterTest{c: readRecordingChannel}
 			go ds.GetSessionRecording(tc.Ctx, tc.SessionID, sessionWriter)
 
-			if len(tc.ControlData)>0 {
+			if len(tc.ControlData) > 0 {
 				var messages []ws.ProtoMsg
-				stop:=false
+				stop := false
 				for !stop {
 					select {
 					case recording := <-sessionWriter.c:
 						var msg ws.ProtoMsg
 						e := msgpack.Unmarshal(recording, &msg)
 						assert.NoError(t, e)
-						messages= append(messages, msg)
+						messages = append(messages, msg)
 					case <-time.After(time.Second):
-						stop=true
+						stop = true
 					}
 				}
-				for _,msg:=range messages{
-					t.Logf("got: %+v", msg)
+				var recording []byte
+				var delays []uint16
+				expectedDelays := []uint16{
+					2519,
+					8065,
+					1785,
+					4175,
+					7724,
+					2520,
 				}
+				for _, msg := range messages {
+					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == shell.MessageTypeShellCommand {
+						recording = append(recording, msg.Body...)
+						t.Logf("got: %+v", msg)
+					}
+					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == "delay" {
+						delays = append(delays, msg.Header.Properties["delay_value"].(uint16))
+					}
+				}
+				assert.Equal(t, expectedDelays, delays)
 			} else {
 				assert.NoError(t, err)
 				select {
