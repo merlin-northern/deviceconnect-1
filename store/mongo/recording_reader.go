@@ -135,8 +135,8 @@ func (rr *RecordingReader) Read(buffer []byte) (int, error) {
 	} else {
 		if bufferLength > len(rr.output) {
 			copy(buffer, rr.output)
-			rr.output = []byte{}
 			bytesRead = len(rr.output)
+			rr.output = []byte{}
 		} else {
 			copy(buffer, rr.output[:bufferLength])
 			rr.output = rr.output[bufferLength:]

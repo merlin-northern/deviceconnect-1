@@ -36,7 +36,7 @@ var (
 )
 
 type ControlMessageReader struct {
-	currentOffset uint64
+	currentOffset int
 	output        []byte
 	outputLength  int
 	buffer        bytes.Buffer
@@ -104,11 +104,13 @@ func (r *ControlMessageReader) Pop() *app.Control {
 	controlMessageBuffer := r.output[:r.outputLength]
 	switch controlMessageBuffer[offset] {
 	case app.DelayMessage:
-		if r.outputLength < 5 {
+		if r.outputLength < 7 {
 			return nil
 		}
 		offset++
-		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:]) //FIXME: offset has to be in, this io too short
+		recordingOffset := binary.LittleEndian.Uint32(controlMessageBuffer[offset:])
+		offset++
+		offset++
 		offset++
 		offset++
 		delayMilliSeconds := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
@@ -118,12 +120,18 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		m.Offset = int(recordingOffset)
 		m.DelayMs = delayMilliSeconds
 		r.currentOffset = offset
+		if r.currentOffset >= r.outputLength {
+			r.outputLength = 0
+			r.currentOffset = 0
+		}
 	case app.ResizeMessage:
-		if r.outputLength < 7 {
+		if r.outputLength < 9 {
 			return nil
 		}
 		offset++
-		recordingOffset := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
+		recordingOffset := binary.LittleEndian.Uint32(controlMessageBuffer[offset:])
+		offset++
+		offset++
 		offset++
 		offset++
 		width := binary.LittleEndian.Uint16(controlMessageBuffer[offset:])
@@ -137,6 +145,10 @@ func (r *ControlMessageReader) Pop() *app.Control {
 		m.TerminalWidth = width
 		m.TerminalHeight = height
 		r.currentOffset = offset
+		if r.currentOffset >= r.outputLength {
+			r.outputLength = 0
+			r.currentOffset = 0
+		}
 	default:
 		return nil
 	}

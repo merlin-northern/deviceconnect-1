@@ -503,6 +503,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 				n, err = recordingReader.Read(recordingBuffer)
 				if n > 0 {
 					sendRecordingMessage(recordingBuffer[:n], sessionID, w)
+					recordingBytesSent += n
 				}
 			}
 			break
@@ -512,10 +513,44 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 				l.Errorf("GetSessionRecording: recordingBytesSent > control.Offset")
 			}
 
-			l.Infof("GetSessionRecording: reading up to %d bytes of recording and sending.", (control.Offset - recordingBytesSent))
+			bytesUntilControlMessage := control.Offset - recordingBytesSent
+			l.Infof("(1) GetSessionRecording: control.Offset:%d"+
+				" recordingBytesSent:%d "+
+				" bytesUntilControlMessage:%d (recordingBuffer.len=%d) "+
+				"reading up to %d bytes of recording and sending.",
+				control.Offset,
+				recordingBytesSent,
+				bytesUntilControlMessage,
+				len(recordingBuffer),
+				control.Offset-recordingBytesSent)
+			//it is possible that the recording is larger than one recordingBuffer,
+			//we need to send until we have the control.Offset in the buffer
+			for bytesUntilControlMessage > len(recordingBuffer) {
+				n, e := recordingReader.Read(recordingBuffer)
+				if n > 0 {
+					//error handling: see below
+					sendRecordingMessage(recordingBuffer[:n], sessionID, w)
+					recordingBytesSent += n
+					bytesUntilControlMessage = control.Offset - recordingBytesSent
+				}
+				if e != nil || n == 0 {
+					break
+				}
+			}
+
+			l.Infof("(2) GetSessionRecording: control.Offset:%d"+
+				" recordingBytesSent:%d "+
+				" bytesUntilControlMessage:%d (recordingBuffer.len=%d) "+
+				"reading up to %d bytes of recording and sending.",
+				control.Offset,
+				recordingBytesSent,
+				bytesUntilControlMessage,
+				len(recordingBuffer),
+				control.Offset-recordingBytesSent)
 			//this means that the control offset is in the future part of the recording buffer
 			//we can send up to control.Offset-recordingBytesSent bytes and then send the control message
-			n, _ := recordingReader.Read(recordingBuffer[:(control.Offset - recordingBytesSent)])
+			n, e := recordingReader.Read(recordingBuffer[:(control.Offset - recordingBytesSent)])
+			l.Infof("recordingReader.Read(len=%d)=%d,%+v",control.Offset - recordingBytesSent,n,e)
 			if n > 0 {
 				//lets just ignore the error, in so many places in theory it may go wrong,
 				//and we do not know what to do in most of them otherwise than pretend it passed
@@ -526,6 +561,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 			sendControlMessage(*control, sessionID, w)
 		}
 	}
+	l.Infof("GetSessionRecording: sent %d bytes.", recordingBytesSent)
 
 	return nil
 	///*

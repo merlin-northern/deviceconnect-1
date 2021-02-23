@@ -394,6 +394,7 @@ Loop:
 							TerminalHeight: 0,
 							TerminalWidth:  0,
 						}
+						l.Infof("saving control delay message: %+v", controlMsg)
 						controlRecorderBuffered.Write(controlMsg.GetBytes())
 					}
 					lastKeystrokeAt = timeNowUTC

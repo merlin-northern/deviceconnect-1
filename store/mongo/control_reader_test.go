@@ -166,6 +166,7 @@ func TestPopControlMessage(t *testing.T) {
 			r := NewControlMessageReader(ctx, c)
 			assert.NotNil(t, r)
 
+			//TODO: scenario where Pop is used in a loop for r.Pop()!=nil {...}
 			if len(tc.Messages) == 0 {
 				m := r.Pop()
 				assert.Nil(t, m)
