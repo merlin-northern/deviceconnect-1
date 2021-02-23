@@ -59,6 +59,10 @@ var (
 
 	WebsocketReadBufferSize  = 1024
 	WebsocketWriteBufferSize = 1024
+
+	//The threshold between the shell commands received (keystrokes) above which the
+	//delay control message is saved
+	keyStrokeDelayRecordingThresholdMs = int64(1500)
 )
 
 const channelSize = 25 // TODO make configurable
@@ -364,6 +368,7 @@ func (h ManagementController) websocketWriter(
 	controlRecorderBuffered := bufio.NewWriterSize(controlRecorder, app.RecorderBufferSize)
 	defer controlRecorderBuffered.Flush()
 	recordedBytes := 0
+	lastKeystrokeAt := int64(float64(time.Now().UTC().UnixNano()) * 0.000001)
 	//controlRecordedBytes := 0
 Loop:
 	for {
@@ -374,10 +379,24 @@ Loop:
 			if err != nil {
 				return err
 			}
-			l.Infof("(1) got message: %+v", mr)
+			l.Infof("(1) got message: %+v current", mr)
 			if mr.Header.Proto == ws.ProtoTypeShell {
 				switch mr.Header.MsgType {
 				case shell.MessageTypeShellCommand:
+					timeNowUTC := int64(float64(time.Now().UTC().UnixNano()) * 0.000001)
+					keystrokeDelay := timeNowUTC - lastKeystrokeAt
+					l.Infof("(1) got shell message: %+v keystrokeDelay=%+v", mr, keystrokeDelay)
+					if keystrokeDelay >= keyStrokeDelayRecordingThresholdMs {
+						controlMsg := app.Control{
+							Type:           app.DelayMessage,
+							Offset:         recordedBytes,
+							DelayMs:        uint16(keystrokeDelay),
+							TerminalHeight: 0,
+							TerminalWidth:  0,
+						}
+						controlRecorderBuffered.Write(controlMsg.GetBytes())
+					}
+					lastKeystrokeAt = timeNowUTC
 					b, e := recorderBuffered.Write(mr.Body)
 					if e != nil {
 						l.Errorf("session logging: "+
@@ -521,25 +540,25 @@ func (h ManagementController) ConnectServeWS(
 				//	//see https://tracker.mender.io/browse/MEN-4448
 				//	break Loop
 				//}
-				var height uint16=0
+				var height uint16 = 0
 				switch m.Header.Properties["terminal_height"].(type) {
 				case uint8:
-					height=uint16(m.Header.Properties["terminal_height"].(uint8))
+					height = uint16(m.Header.Properties["terminal_height"].(uint8))
 				case int8:
-					height=uint16(m.Header.Properties["terminal_height"].(int8))
+					height = uint16(m.Header.Properties["terminal_height"].(int8))
 				}
-				var width uint16=0
+				var width uint16 = 0
 				switch m.Header.Properties["terminal_width"].(type) {
 				case uint8:
-					width=uint16(m.Header.Properties["terminal_width"].(uint8))
+					width = uint16(m.Header.Properties["terminal_width"].(uint8))
 				case int8:
-					width=uint16(m.Header.Properties["terminal_width"].(int8))
+					width = uint16(m.Header.Properties["terminal_width"].(int8))
 				}
 				controlMsg := app.Control{
 					Type:           app.ResizeMessage,
 					Offset:         0,
 					DelayMs:        0,
-					TerminalHeight:  height,
+					TerminalHeight: height,
 					TerminalWidth:  width,
 				}
 				controlRecorderBuffered.Write(controlMsg.GetBytes())

@@ -30,17 +30,29 @@ type Control struct {
 }
 
 func (c Control) GetBytes() []byte {
-	b := make([]byte, 1+4+2+2+2)
-	offset:=0
-	b[offset] = c.Type
-	offset++
-	binary.LittleEndian.PutUint16(b[offset:],c.DelayMs)
-	offset+=2
-	binary.LittleEndian.PutUint32(b[offset:],uint32(c.Offset))
-	offset+=4
-	binary.LittleEndian.PutUint16(b[offset:],c.TerminalWidth)
-	offset+=2
-	binary.LittleEndian.PutUint16(b[offset:],c.TerminalHeight)
-	offset+=2
+	var b []byte
+
+	switch c.Type {
+	case ResizeMessage:
+		b = make([]byte, 1+4+2+2)
+		offset := 0
+		b[offset] = c.Type
+		offset++
+		binary.LittleEndian.PutUint32(b[offset:], uint32(c.Offset))
+		offset += 4
+		binary.LittleEndian.PutUint16(b[offset:], c.TerminalWidth)
+		offset += 2
+		binary.LittleEndian.PutUint16(b[offset:], c.TerminalHeight)
+		offset += 2
+	case DelayMessage:
+		b = make([]byte, 1+4+2)
+		offset := 0
+		b[offset] = c.Type
+		offset++
+		binary.LittleEndian.PutUint32(b[offset:], uint32(c.Offset))
+		offset += 4
+		binary.LittleEndian.PutUint16(b[offset:], c.DelayMs)
+		offset += 2
+	}
 	return b
 }
