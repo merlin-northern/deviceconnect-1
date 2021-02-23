@@ -48,15 +48,15 @@ func (_m *App) FreeUserSession(ctx context.Context, sessionID string) error {
 }
 
 // GetControlRecorder provides a mock function with given fields: ctx, sessionID
-func (_m *App) GetControlRecorder(ctx context.Context, sessionID string) *app.Recorder {
+func (_m *App) GetControlRecorder(ctx context.Context, sessionID string) *app.ControlRecorder {
 	ret := _m.Called(ctx, sessionID)
 
-	var r0 *app.Recorder
-	if rf, ok := ret.Get(0).(func(context.Context, string) *app.Recorder); ok {
+	var r0 *app.ControlRecorder
+	if rf, ok := ret.Get(0).(func(context.Context, string) *app.ControlRecorder); ok {
 		r0 = rf(ctx, sessionID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*app.Recorder)
+			r0 = ret.Get(0).(*app.ControlRecorder)
 		}
 	}
 

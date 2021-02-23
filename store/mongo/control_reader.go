@@ -104,7 +104,7 @@ func (r *ControlMessageReader) Pop() *app.Control {
 	controlMessageBuffer := r.output[:r.outputLength]
 	switch controlMessageBuffer[offset] {
 	case app.DelayMessage:
-		if r.outputLength < 7 {
+		if offset + 7 > r.outputLength {
 			return nil
 		}
 		offset++
@@ -125,7 +125,7 @@ func (r *ControlMessageReader) Pop() *app.Control {
 			r.currentOffset = 0
 		}
 	case app.ResizeMessage:
-		if r.outputLength < 9 {
+		if offset + 9 > r.outputLength {
 			return nil
 		}
 		offset++

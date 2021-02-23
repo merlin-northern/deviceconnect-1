@@ -3,6 +3,7 @@ package mongo
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 )
 
 func TestPopControlMessage(t *testing.T) {
+	ErrMessageContentsDoNotMatch := errors.New("message contents do not match")
 	testCases := []struct {
 		Name string
 
@@ -28,7 +30,7 @@ func TestPopControlMessage(t *testing.T) {
 		Error error
 	}{
 		{
-			Name: "ok",
+			Name: "ok delay message",
 
 			Ctx: identity.WithContext(
 				context.Background(),
@@ -37,16 +39,39 @@ func TestPopControlMessage(t *testing.T) {
 				},
 			),
 			SessionID: "00000000-0000-0000-0000-000000000000",
-			//            0    1   2   3   4
-			//echo -n -e '\x02\x20\x00\x08\x00' | gzip - | base64
-			ControlData: "H4sIAOmlLWAAA2NSYOBgAABLgQnUBQAAAA==",
+			//            0    1   2   3   4   5   6
+			//echo -n -e '\x02\x20\x00\x00\x00\x08\x00' | gzip - | base64
+			ControlData: "H4sIALIDNWAAA2NSYGBg4GAAAGlBhsUHAAAA",
 			Messages: []*app.Control{
 				{
 					Type:           app.DelayMessage, // offset0 \x02
-					Offset:         32,               // offset 1-2 \x20\x00
-					DelayMs:        8,                // offset 3-4 \x08\x00
+					Offset:         32,               // offset 1-4 \x20\x00
+					DelayMs:        8,                // offset 5-6 \x08\x00
 					TerminalWidth:  0,
 					TerminalHeight: 0,
+				},
+			},
+		},
+		{
+			Name: "ok resize message",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000000",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4   5   6
+			//echo -n -e '\x01\x20\x00\x00\x00\x50\x00\x18\x00' | gzip - | base64
+			ControlData: "H4sIAHcFNWAAA2NUYGBgCGCQYAAAQPUSQQkAAAA=",
+			Messages: []*app.Control{
+				{
+					Type:           app.ResizeMessage, // offset0 \x02
+					Offset:         32,                // offset 1-4 \x20\x00
+					DelayMs:        0,                 //not present in the resize message
+					TerminalWidth:  80,                // offset 5-6 \x08\x00
+					TerminalHeight: 24,                // offset 7-8 \x08\x00
 				},
 			},
 		},
@@ -56,36 +81,84 @@ func TestPopControlMessage(t *testing.T) {
 			Ctx: identity.WithContext(
 				context.Background(),
 				&identity.Identity{
-					Tenant: "000000000000000000000000",
+					Tenant: "000000000000000000000010",
 				},
 			),
-			SessionID: "00000000-0000-0000-0000-000000000000",
+			SessionID: "00000000-0000-0000-0000-000000000010",
 			//            0    1   2   3   4
-			//echo -n -e '\x02\x20\x00\x08\x00\x02\xfa\x3f\x00\x80\x01\x01\x04\x50\x00\x18\x00' | gzip - | base64
-			ControlData: "H4sIAJ2rLmAAA2NSYOBgYPplz9DAyMgSwCDBAAADEJylEQAAAA==",
+			//echo -n -e '\x02\x20\x00\x00\x00\x08\x00\x02\xfa\x3f\x00\x00\x00\x80\x01\x01\x04\x00\x00\x50\x00\x18\x00' | gzip - | base64
+			ControlData: "H4sIAENINWAAA2NSYGBg4GBg+mUPpBsYGVkYGAIYJBgAdudD1RcAAAA=",
 			Messages: []*app.Control{
 				{
 					Type:           app.DelayMessage, // offset 0 \x02
-					Offset:         32,               // offset 1-2 \x20\x00
-					DelayMs:        8,                // offset 3-4 \x08\x00
+					Offset:         32,               // offset 1-4 \x20\x00
+					DelayMs:        8,                // offset 5-6 \x08\x00
 					TerminalWidth:  0,
 					TerminalHeight: 0,
 				},
 				{
 					Type:           app.DelayMessage, // offset 0 \x02
-					Offset:         16378,            // offset 1-2 \x20\x00
-					DelayMs:        32768,            // offset 3-4 \x08\x00
+					Offset:         16378,            // offset 1-4 \x20\x00
+					DelayMs:        32768,            // offset 5-6 \x08\x00
 					TerminalWidth:  0,
 					TerminalHeight: 0,
 				},
 				{
 					Type:           app.ResizeMessage, // offset 0 \x01
-					Offset:         1025,              // offset 1-2 \x20\x00
-					DelayMs:        0,                 // offset 3-4 \x08\x00
+					Offset:         1025,              // offset 1-5 \x20\x00
+					DelayMs:        0,                 // does not exist in ResizeMessage
 					TerminalWidth:  80,                // offset 5-6
 					TerminalHeight: 24,                // offset 7-8
 				},
 			},
+		},
+		{
+			Name: "error delay message not matching",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000000",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4   5   6
+			//echo -n -e '\x02\x20\x00\x00\x00\x08\x00' | gzip - | base64
+			ControlData: "H4sIALIDNWAAA2NSYGBg4GAAAGlBhsUHAAAA",
+			Messages: []*app.Control{
+				{
+					Type:           app.DelayMessage, // offset0 \x02
+					Offset:         32,               // offset 1-4 \x20\x00
+					DelayMs:        9,                // offset 5-6 \x08\x00
+					TerminalWidth:  0,
+					TerminalHeight: 0,
+				},
+			},
+			Error: ErrMessageContentsDoNotMatch,
+		},
+		{
+			Name: "error resize message not matching",
+
+			Ctx: identity.WithContext(
+				context.Background(),
+				&identity.Identity{
+					Tenant: "000000000000000000000000",
+				},
+			),
+			SessionID: "00000000-0000-0000-0000-000000000000",
+			//            0    1   2   3   4   5   6
+			//echo -n -e '\x01\x20\x00\x00\x00\x50\x00\x18\x00' | gzip - | base64
+			ControlData: "H4sIAHcFNWAAA2NUYGBgCGCQYAAAQPUSQQkAAAA=",
+			Messages: []*app.Control{
+				{
+					Type:           app.ResizeMessage, // offset0 \x02
+					Offset:         32,                // offset 1-4 \x20\x00
+					DelayMs:        0,                 //not present in the resize message
+					TerminalWidth:  81,                // offset 5-6 \x08\x00
+					TerminalHeight: 24,                // offset 7-8 \x08\x00
+				},
+			},
+			Error: ErrMessageContentsDoNotMatch,
 		},
 		{
 			Name: "error unknown message type",
@@ -166,7 +239,6 @@ func TestPopControlMessage(t *testing.T) {
 			r := NewControlMessageReader(ctx, c)
 			assert.NotNil(t, r)
 
-			//TODO: scenario where Pop is used in a loop for r.Pop()!=nil {...}
 			if len(tc.Messages) == 0 {
 				m := r.Pop()
 				assert.Nil(t, m)
@@ -175,7 +247,13 @@ func TestPopControlMessage(t *testing.T) {
 				for i, _ := range tc.Messages {
 					actualMessages[i] = r.Pop()
 				}
-				assert.Equal(t, tc.Messages, actualMessages)
+				if tc.Error == ErrMessageContentsDoNotMatch {
+					assert.NotEqual(t, tc.Messages, actualMessages)
+				} else {
+					assert.Equal(t, tc.Messages, actualMessages)
+					m := r.Pop()
+					assert.Nil(t, m)
+				}
 			}
 		})
 	}

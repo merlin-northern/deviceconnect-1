@@ -550,7 +550,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 			//this means that the control offset is in the future part of the recording buffer
 			//we can send up to control.Offset-recordingBytesSent bytes and then send the control message
 			n, e := recordingReader.Read(recordingBuffer[:(control.Offset - recordingBytesSent)])
-			l.Infof("recordingReader.Read(len=%d)=%d,%+v",control.Offset - recordingBytesSent,n,e)
+			l.Infof("recordingReader.Read(len=%d)=%d,%+v", control.Offset-recordingBytesSent, n, e)
 			if n > 0 {
 				//lets just ignore the error, in so many places in theory it may go wrong,
 				//and we do not know what to do in most of them otherwise than pretend it passed
