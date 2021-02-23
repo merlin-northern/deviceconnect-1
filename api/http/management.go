@@ -404,7 +404,7 @@ Loop:
 							len(mr.Body), b, e)
 					}
 					recordedBytes += len(mr.Body)
-					session.BytesTransferred=recordedBytes //TODO: mutex to protect this
+					session.BytesRecorded = recordedBytes //TODO: mutex to protect this
 					if recordedBytes >= app.MessageSizeLimit {
 						l.Infof("closing session on limit reached.")
 						//see https://tracker.mender.io/browse/MEN-4448
@@ -557,7 +557,7 @@ func (h ManagementController) ConnectServeWS(
 				}
 				controlMsg := app.Control{
 					Type:           app.ResizeMessage,
-					Offset:         sess.BytesTransferred,
+					Offset:         sess.BytesRecorded,
 					DelayMs:        0,
 					TerminalHeight: height,
 					TerminalWidth:  width,

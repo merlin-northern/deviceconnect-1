@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/mendersoftware/deviceconnect/app"
+	"github.com/mendersoftware/go-lib-micro/log"
 	"github.com/mendersoftware/go-lib-micro/ws"
 	"github.com/mendersoftware/go-lib-micro/ws/shell"
 	"github.com/vmihailenco/msgpack/v5"
@@ -454,6 +455,7 @@ func sendRecordingMessage(data []byte, sessionID string, w io.Writer) (int, erro
 func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	sessionID string,
 	w io.Writer) error {
+	l := log.FromContext(ctx)
 	dbname := mstore.DbFromContext(ctx, DbName)
 	collRecording := db.client.Database(dbname).
 		Collection(RecordingsCollectionName)
@@ -493,6 +495,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 	for {
 		control := controlReader.Pop()
 		if control == nil {
+			l.Infof("GetSessionRecording: no more control messages, flushing hte recording upstream.")
 			//no more control messages, we send the whole recording
 			var err error = nil
 			var n int
@@ -506,8 +509,10 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 		} else {
 			if recordingBytesSent > control.Offset {
 				//this should never happen, we missed the control message, no idea what to do
+				l.Errorf("GetSessionRecording: recordingBytesSent > control.Offset")
 			}
 
+			l.Infof("GetSessionRecording: reading up to %d bytes of recording and sending.", (control.Offset - recordingBytesSent))
 			//this means that the control offset is in the future part of the recording buffer
 			//we can send up to control.Offset-recordingBytesSent bytes and then send the control message
 			n, _ := recordingReader.Read(recordingBuffer[:(control.Offset - recordingBytesSent)])
@@ -517,6 +522,7 @@ func (db *DataStoreMongo) GetSessionRecording(ctx context.Context,
 				sendRecordingMessage(recordingBuffer[:n], sessionID, w)
 				recordingBytesSent += n
 			}
+			l.Infof("GetSessionRecording: sending %+v.", *control)
 			sendControlMessage(*control, sessionID, w)
 		}
 	}
