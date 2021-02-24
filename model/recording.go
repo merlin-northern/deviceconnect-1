@@ -20,6 +20,14 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+ ResizeMessageTermHeightField = "terminal_height"
+ ResizeMessageTermWidthField = "terminal_width"
+
+ DelayMessageValueField = "delay_value"
+ DelayMessageName       = "delay"
+)
+
 type Recording struct {
 	ID        uuid.UUID `json:"-" bson:"_id"`
 	SessionID string    `json:"session_id" bson:"session_id"`

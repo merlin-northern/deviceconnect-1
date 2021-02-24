@@ -345,60 +345,6 @@ func (db *DataStoreMongo) GetSession(
 	return session, nil
 }
 
-//func writeMessage() {
-//	rand.Seed(time.Now().UTC().UnixNano())
-//	if rand.New(rand.NewSource(time.Now().UTC().UnixNano())).Float32() > 0.8 {
-//		msg := ws.ProtoMsg{
-//			Header: ws.ProtoHdr{
-//				Proto:     ws.ProtoTypeShell,
-//				MsgType:   "delay",
-//				SessionID: r.sessionID,
-//				Properties: map[string]interface{}{
-//					"delay_value": 1500,
-//				},
-//			},
-//			Body: nil,
-//		}
-//
-//		m := nats.Msg{
-//			Subject: "playback",
-//			Reply:   "no-reply",
-//			Data:    nil,
-//			Sub:     nil,
-//		}
-//
-//		msg.Body = d
-//		data, _ := msgpack.Marshal(msg)
-//		m.Data = data
-//		r.deviceChan <- &m
-//	}
-//	msg := ws.ProtoMsg{
-//		Header: ws.ProtoHdr{
-//			Proto:     ws.ProtoTypeShell,
-//			MsgType:   shell.MessageTypeShellCommand,
-//			SessionID: r.sessionID,
-//			Properties: map[string]interface{}{
-//				"status": shell.NormalMessage,
-//			},
-//		},
-//		Body: nil,
-//	}
-//
-//	m := nats.Msg{
-//		Subject: "playback",
-//		Reply:   "no-reply",
-//		Data:    nil,
-//		Sub:     nil,
-//	}
-//
-//	msg.Body = d
-//	data, _ := msgpack.Marshal(msg)
-//	m.Data = data
-//	time.Sleep(time.Duration(r.sleepMilliseconds) * time.Millisecond)
-//	r.deviceChan <- &m
-//	return len(d), nil
-//}
-
 func sendControlMessage(control app.Control, sessionID string, w io.Writer) (int, error) {
 	messageType := ""
 	var data []byte
@@ -406,12 +352,12 @@ func sendControlMessage(control app.Control, sessionID string, w io.Writer) (int
 
 	switch control.Type {
 	case app.DelayMessage:
-		messageType = "delay"
-		properties["delay_value"] = control.DelayMs
+		messageType = model.DelayMessageName
+		properties[model.DelayMessageValueField] = control.DelayMs
 	case app.ResizeMessage:
 		messageType = shell.MessageTypeResizeShell
-		properties["terminal_height"] = control.TerminalHeight
-		properties["terminal_width"] = control.TerminalWidth
+		properties[model.ResizeMessageTermHeightField] = control.TerminalHeight
+		properties[model.ResizeMessageTermWidthField] = control.TerminalWidth
 	default:
 		return 0, ErrUnknownControlMessageType
 	}

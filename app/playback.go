@@ -38,56 +38,7 @@ func NewPlayback(sessionID string, deviceChan chan *nats.Msg, sleepMilliseconds 
 }
 
 func (r *Playback) Write(d []byte) (n int, err error) {
-	//rand.Seed(time.Now().UTC().UnixNano())
-	//if rand.New(rand.NewSource(time.Now().UTC().UnixNano())).Float32() > 0.8 {
-	//	msg := ws.ProtoMsg{
-	//		Header: ws.ProtoHdr{
-	//			Proto:     ws.ProtoTypeShell,
-	//			MsgType:   "delay",
-	//			SessionID: r.sessionID,
-	//			Properties: map[string]interface{}{
-	//				"delay_value": 1500,
-	//			},
-	//		},
-	//		Body: nil,
-	//	}
-	//
-	//	m := nats.Msg{
-	//		Subject: "playback",
-	//		Reply:   "no-reply",
-	//		Data:    nil,
-	//		Sub:     nil,
-	//	}
-	//
-	//	msg.Body = d
-	//	data, _ := msgpack.Marshal(msg)
-	//	m.Data = data
-	//	r.deviceChan <- &m
-	//}
-	//msg := ws.ProtoMsg{
-	//	Header: ws.ProtoHdr{
-	//		Proto:     ws.ProtoTypeShell,
-	//		MsgType:   shell.MessageTypeShellCommand,
-	//		SessionID: r.sessionID,
-	//		Properties: map[string]interface{}{
-	//			"status": shell.NormalMessage,
-	//		},
-	//	},
-	//	Body: nil,
-	//}
-	//
-	//m := nats.Msg{
-	//	Subject: "playback",
-	//	Reply:   "no-reply",
-	//	Data:    nil,
-	//	Sub:     nil,
-	//}
-	//
-	//msg.Body = d
-	//data, _ := msgpack.Marshal(msg)
-	//m.Data = data
-
-	//now playback get the msgpacked ProtoMsgs
+	//now playback gets the msgpacked ProtoMsgs
 	m := nats.Msg{
 		Subject: "playback",
 		Reply:   "no-reply",

@@ -450,10 +450,11 @@ func TestGetSessionRecording(t *testing.T) {
 	testCases := []struct {
 		Name string
 
-		Ctx           context.Context
-		SessionID     string
-		RecordingData string
-		ControlData   string
+		Ctx            context.Context
+		SessionID      string
+		RecordingData  string
+		ControlData    string
+		ExpectedDelays []uint16
 
 		Error error
 	}{
@@ -481,6 +482,14 @@ func TestGetSessionRecording(t *testing.T) {
 			SessionID:     "00000000-0000-0000-0000-200000000002",
 			RecordingData: "H4sIAAAAAAAA/7RRvWr0MBAsPyPQE7iZwu2HZFuExGpS5SVMCvmsIBHLEtJecnn7IB8hpEpzgd1lf2aZgelgTy6CnC/wBeQszrsnkC1UUE52N9lHzn4FdBCL38ViiuOsfZY6+cdsSlpszh/JTxCrISOS/9fOstfjEH4C2lnKMF1vKnyB0R17lM3ahHtd1aJBE3WDBvGVs5o3p9sK/ptthaCQOFvz++UIQt8jx0jXouTDHZ7sgmFELyel0M4ytPMotRpC/a3zH8g7LHPmzeLlvHP23d2e6eKpesvZJwAAAP//AQAA//89LDUxKQIAAA==",
 			ControlData:   "H4sIAAAAAAAA/2JiYmBguM7JdJCBgaFRnkmMkYHhJxuTDCMDg78A01ZGBgYdOaZdjAwMNzgBAAAA//8BAAD//wLpMwwqAAAA",
+			ExpectedDelays: []uint16{
+				2519,
+				8065,
+				1785,
+				4175,
+				7724,
+				2520,
+			},
 		},
 	}
 
@@ -540,24 +549,16 @@ func TestGetSessionRecording(t *testing.T) {
 				}
 				var recording []byte
 				var delays []uint16
-				expectedDelays := []uint16{
-					2519,
-					8065,
-					1785,
-					4175,
-					7724,
-					2520,
-				}
 				for _, msg := range messages {
 					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == shell.MessageTypeShellCommand {
 						recording = append(recording, msg.Body...)
 						t.Logf("got: %+v", msg)
 					}
-					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == "delay" {
-						delays = append(delays, msg.Header.Properties["delay_value"].(uint16))
+					if msg.Header.Proto == ws.ProtoTypeShell && msg.Header.MsgType == model.DelayMessageName {
+						delays = append(delays, msg.Header.Properties[model.DelayMessageValueField].(uint16))
 					}
 				}
-				assert.Equal(t, expectedDelays, delays)
+				assert.Equal(t, tc.ExpectedDelays, delays)
 			} else {
 				assert.NoError(t, err)
 				select {

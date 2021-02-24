@@ -368,6 +368,7 @@ func (h ManagementController) websocketWriter(
 	controlRecorderBuffered := bufio.NewWriterSize(controlRecorder, app.RecorderBufferSize)
 	defer controlRecorderBuffered.Flush()
 	recordedBytes := 0
+	controlBytes := 0
 	lastKeystrokeAt := int64(float64(time.Now().UTC().UnixNano()) * 0.000001)
 	//controlRecordedBytes := 0
 Loop:
@@ -385,7 +386,6 @@ Loop:
 				case shell.MessageTypeShellCommand:
 					timeNowUTC := int64(float64(time.Now().UTC().UnixNano()) * 0.000001)
 					keystrokeDelay := timeNowUTC - lastKeystrokeAt
-					l.Infof("(1) got shell message: %+v keystrokeDelay=%+v", mr, keystrokeDelay)
 					if keystrokeDelay >= keyStrokeDelayRecordingThresholdMs {
 						controlMsg := app.Control{
 							Type:           app.DelayMessage,
@@ -394,8 +394,14 @@ Loop:
 							TerminalHeight: 0,
 							TerminalWidth:  0,
 						}
-						l.Infof("saving control delay message: %+v", controlMsg)
-						controlRecorderBuffered.Write(controlMsg.GetBytes())
+						n, _ := controlRecorderBuffered.Write(controlMsg.GetBytes())
+						l.Debugf("saving control delay message: %+v/%d", controlMsg, n)
+						controlBytes += n
+						if controlBytes >= app.MessageSizeLimit {
+							l.Infof("closing session on control data limit reached.")
+							//see https://tracker.mender.io/browse/MEN-4448
+							break Loop
+						}
 					}
 					lastKeystrokeAt = timeNowUTC
 					b, e := recorderBuffered.Write(mr.Body)
@@ -405,7 +411,9 @@ Loop:
 							len(mr.Body), b, e)
 					}
 					recordedBytes += len(mr.Body)
-					session.BytesRecorded = recordedBytes //TODO: mutex to protect this
+					session.BytesRecordedMutex.Lock()
+					session.BytesRecorded = recordedBytes
+					session.BytesRecordedMutex.Unlock()
 					if recordedBytes >= app.MessageSizeLimit {
 						l.Infof("closing session on limit reached.")
 						//see https://tracker.mender.io/browse/MEN-4448
@@ -527,7 +535,7 @@ func (h ManagementController) ConnectServeWS(
 		}
 		m.Header.Properties[PropertyUserID] = sess.UserID
 		data, _ = msgpack.Marshal(m)
-
+		controlBytes := 0
 		switch m.Header.Proto {
 		case ws.ProtoTypeShell:
 			switch m.Header.MsgType {
@@ -536,34 +544,36 @@ func (h ManagementController) ConnectServeWS(
 			case shell.MessageTypeStopShell:
 				remoteTerminalRunning = false
 			case shell.MessageTypeResizeShell:
-				//controlRecordedBytes += 4 * len(mr.Header.Properties)
-				//if controlRecordedBytes >= app.MessageSizeLimit {
-				//	l.Infof("closing session on control data limit reached.")
-				//	//see https://tracker.mender.io/browse/MEN-4448
-				//	break Loop
-				//}
-				var height uint16 = 0
-				switch m.Header.Properties["terminal_height"].(type) {
-				case uint8:
-					height = uint16(m.Header.Properties["terminal_height"].(uint8))
-				case int8:
-					height = uint16(m.Header.Properties["terminal_height"].(int8))
+				if controlBytes >= app.MessageSizeLimit {
+					l.Infof("session_id=%s control data limit reached.", sess.ID)
+					//see https://tracker.mender.io/browse/MEN-4448
+				} else {
+					var height uint16 = 0
+					switch m.Header.Properties[model.ResizeMessageTermHeightField].(type) {
+					case uint8:
+						height = uint16(m.Header.Properties[model.ResizeMessageTermHeightField].(uint8))
+					case int8:
+						height = uint16(m.Header.Properties[model.ResizeMessageTermHeightField].(int8))
+					}
+					var width uint16 = 0
+					switch m.Header.Properties[model.ResizeMessageTermWidthField].(type) {
+					case uint8:
+						width = uint16(m.Header.Properties[model.ResizeMessageTermWidthField].(uint8))
+					case int8:
+						width = uint16(m.Header.Properties[model.ResizeMessageTermWidthField].(int8))
+					}
+					sess.BytesRecordedMutex.Lock()
+					controlMsg := app.Control{
+						Type:           app.ResizeMessage,
+						Offset:         sess.BytesRecorded,
+						DelayMs:        0,
+						TerminalHeight: height,
+						TerminalWidth:  width,
+					}
+					sess.BytesRecordedMutex.Unlock()
+					n, _ := controlRecorderBuffered.Write(controlMsg.GetBytes())
+					controlBytes += n
 				}
-				var width uint16 = 0
-				switch m.Header.Properties["terminal_width"].(type) {
-				case uint8:
-					width = uint16(m.Header.Properties["terminal_width"].(uint8))
-				case int8:
-					width = uint16(m.Header.Properties["terminal_width"].(int8))
-				}
-				controlMsg := app.Control{
-					Type:           app.ResizeMessage,
-					Offset:         sess.BytesRecorded,
-					DelayMs:        0,
-					TerminalHeight: height,
-					TerminalWidth:  width,
-				}
-				controlRecorderBuffered.Write(controlMsg.GetBytes())
 			}
 		}
 

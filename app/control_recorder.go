@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"sync"
 
 	"github.com/mendersoftware/deviceconnect/store"
 )
@@ -28,6 +29,7 @@ type ControlRecorder struct {
 	ctx        context.Context
 	gzipWriter *gzip.Writer
 	gzipBuffer bytes.Buffer
+	mutex      sync.Mutex
 }
 
 const (
@@ -43,10 +45,15 @@ func NewControlRecorder(ctx context.Context, sessionID string, store store.DataS
 		store:      store,
 		gzipBuffer: buffer,
 		gzipWriter: gzip.NewWriter(&buffer),
+		mutex:      sync.Mutex{},
 	}
 }
 
 func (r *ControlRecorder) Write(d []byte) (n int, err error) {
+	//safety precaution, there are two buffered writers using this writer
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
 	if len(r.sessionID) < 1 {
 		return 0, nil
 	}
